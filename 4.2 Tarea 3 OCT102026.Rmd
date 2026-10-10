@@ -1,0 +1,429 @@
+---
+title: "4.2 Tarea 3 OCT102026"
+output:
+  pdf_document: default
+  html_document: default
+date: "2026-10-10"
+---
+
+
+##  OBJETIVO DE LA TAREA
+##  Elaborar 3 modelos nuevos de regresión lineal múltiple: cada mutual fund del portafolio de HowTheMarketWorks (variable dependiente) contra 5 acciones (las 4 de la Tarea 2 más 1 adicional).
+##  Frecuencia: rendimientos diarios desde enero de 2023 (mediano plazo), la misma para las variables dependientes e independientes de cada modelo.
+##  Se usa el precio de cierre AJUSTADO (Ad) en lugar del cierre simple: los mutual funds reparten ganancias de capital y, con el cierre simple, esos días aparecen como caídas que no son pérdidas reales (atípicos detectados en los residuales de la Tarea 2).
+
+
+##  LIBRERIAS RELEVANTES
+```{r}
+library(MASS)
+library(ISLR)
+library(quantmod)
+library(car)
+library(lmtest)
+library(sandwich)   # errores estándar robustos (corrección de heterocedasticidad y autocorrelación)
+```
+
+
+```{r}
+
+##  FUNCIÓN PARA DESCARGAR RENDIMIENTOS DIARIOS AJUSTADOS
+##  Descarga los precios de Yahoo Finance desde 2023, toma el cierre ajustado y calcula el rendimiento diario.
+rend_diario <- function(ticker) {
+  precios <- getSymbols(ticker, from = "2023-01-01", auto.assign = FALSE)
+  r <- dailyReturn(Ad(precios))
+  colnames(r) <- ticker
+  r
+}
+
+```
+
+
+##  MODELO 1: SEMICONDUCTORES + TSM
+##  FSELX ~ NVDA + AVGO + AMD + MU + TSM. Se agrega TSM (Taiwan Semiconductor, fabricante de los chips de NVDA, AMD y AVGO): ¿la manufactura aporta información adicional a la de los diseñadores de chips?
+
+```{r}
+
+datos1 <- as.data.frame(coredata(na.omit(merge(rend_diario("FSELX"), rend_diario("NVDA"), rend_diario("AVGO"),
+                                               rend_diario("AMD"), rend_diario("MU"), rend_diario("TSM")))))
+dim(datos1)
+
+modeloT1 <- lm(FSELX ~ NVDA + AVGO + AMD + MU + TSM, data = datos1)
+summary(modeloT1)
+
+##  INTERPRETACIÓN MODELO 1
+
+##  RESIDUALES
+##  Van de -3.0% a +4.5%. La mediana es prácticamente 0 y el 50% central está entre -0.43% y +0.43%: la mayoría de los errores son pequeños y simétricos.
+##  En la Tarea 2 el residual mínimo era -7.7%. Al usar el precio ajustado desaparece ese atípico, que venía de los días en que el fondo reparte ganancias.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (-0.00057): rendimiento diario del fondo si las 5 acciones rinden 0%. Es negativo y significativo al 5% (p = 0.021): el fondo rinde un poco menos (-0.057% diario) de lo que explican sus acciones, probablemente por comisiones y por otras posiciones con peor desempeño.
+##  --NVDA (0.266): si NVDA sube 1%, el fondo sube 0.27%, manteniendo constantes las demás. Sigue siendo la mayor exposición.
+##  --AVGO (0.191): si AVGO sube 1%, el fondo sube 0.19%.
+##  --TSM (0.176): si TSM sube 1%, el fondo sube 0.18%. Es la tercera exposición más grande.
+##  --MU (0.161) y AMD (0.124): si suben 1%, el fondo sube 0.16% y 0.12%.
+##  --Suma de pendientes = 0.919: si las 5 suben 1% el mismo día, el fondo sube ~0.92%.
+##  --Al agregar TSM bajan los coeficientes de las otras 4 (por ejemplo, NVDA pasa de 0.311 a 0.266): parte de lo que antes se atribuía a ellas en realidad era el efecto de TSM.
+
+##  SIGNIFICANCIAS
+##  Todas las acciones tienen t mayores a 10 (NVDA 22.6, MU 18.5, AVGO 16.5, AMD 13.4, TSM 10.9) y p < 2e-16. Las 5 son significativas.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.007527: el modelo se equivoca en promedio 0.75% diario, menos que el 0.92% de la Tarea 2.
+
+##  R CUADRADA
+##  R2 = 0.9047 y R2 ajustada = 0.9042: las 5 acciones explican el 90% de los movimientos diarios del fondo (antes, con 4 acciones, el 86%).
+
+##  ESTADÍSTICO F
+##  F = 1784, p < 2.2e-16: el modelo en conjunto es significativo.
+
+
+##  ¿Vale la pena agregar TSM? Prueba F de modelo restringido (4 acciones) vs no restringido (5 acciones)
+modeloT1_4 <- lm(FSELX ~ NVDA + AVGO + AMD + MU, data = datos1)
+anova(modeloT1_4, modeloT1)
+
+##  H0: el coeficiente de TSM es 0 (no aporta). La suma de residuales al cuadrado baja de 0.0600 a 0.0533 al agregar TSM.
+##  F = 118.95, p < 2.2e-16: se rechaza H0. TSM sí vale la pena: mejora el modelo de forma significativa.
+##  Como solo se prueba una restricción, esta F es igual a la t de TSM al cuadrado (10.907^2 = 118.96), la relación entre t y F que vimos en Brooks.
+
+```
+
+
+##  MODELO 2: SALUD + TMO
+##  FSPHX ~ LLY + UNH + ISRG + VRTX + TMO. Se agrega TMO (Thermo Fisher, equipo y servicios de laboratorio), un subsector que no estaba representado: ¿mejora la R2 de 40% del modelo original?
+
+```{r}
+
+datos2 <- as.data.frame(coredata(na.omit(merge(rend_diario("FSPHX"), rend_diario("LLY"), rend_diario("UNH"),
+                                               rend_diario("ISRG"), rend_diario("VRTX"), rend_diario("TMO")))))
+dim(datos2)
+
+modeloT2 <- lm(FSPHX ~ LLY + UNH + ISRG + VRTX + TMO, data = datos2)
+summary(modeloT2)
+
+##  INTERPRETACIÓN MODELO 2
+
+##  RESIDUALES
+##  Van de -2.8% a +3.4%. La mediana es prácticamente 0 y el 50% central está entre -0.38% y +0.37%: errores pequeños y simétricos.
+##  En la Tarea 2 el residual mínimo era -11.6%. Con el precio ajustado ese atípico desaparece, lo que confirma que era un día de reparto de ganancias del fondo y no una caída real.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.00005): no es significativo (p = 0.805). El fondo no rinde ni más ni menos de lo que explican sus acciones.
+##  --TMO (0.233): si TMO sube 1%, el fondo sube 0.23%, manteniendo constantes las demás. Es la mayor exposición del modelo, casi el doble que las otras.
+##  --UNH (0.125) e ISRG (0.125): si suben 1%, el fondo sube 0.12%.
+##  --LLY (0.116): si sube 1%, el fondo sube 0.12%.
+##  --VRTX (0.088): la menor exposición.
+##  --Suma de pendientes = 0.686: si las 5 suben 1%, el fondo sube ~0.69%. Sigue habiendo una parte importante del fondo en otras empresas.
+
+##  SIGNIFICANCIAS
+##  Todas las acciones son significativas: t de TMO 17.7, UNH 12.9, ISRG 11.5, LLY 11.2 y VRTX 6.9, todas con p < 0.001.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.006313: el modelo se equivoca en promedio 0.63% diario, menos que el 0.88% de la Tarea 2.
+
+##  R CUADRADA
+##  R2 = 0.620 y R2 ajustada = 0.618: las 5 acciones explican el 62% de los movimientos diarios del fondo. Es la mayor mejora de los 3 modelos: en la Tarea 2 la R2 era de 40%.
+
+##  ESTADÍSTICO F
+##  F = 306.7, p < 2.2e-16: el modelo en conjunto es significativo.
+
+
+modeloT2_4 <- lm(FSPHX ~ LLY + UNH + ISRG + VRTX, data = datos2)
+anova(modeloT2_4, modeloT2)
+
+##  H0: el coeficiente de TMO es 0. La suma de residuales al cuadrado baja de 0.0500 a 0.0375 al agregar TMO (25% menos error).
+##  F = 314.02, p < 2.2e-16: se rechaza H0. TMO aporta mucho al modelo: el subsector de equipo de laboratorio era una pieza importante del fondo que faltaba.
+
+```
+
+
+##  MODELO 3: UTILITIES + NVDA (ENTRE SECTORES)
+##  FSUTX ~ DUK + NEE + CEG + VST + NVDA. Se agrega NVDA, de otro sector: ¿la demanda de IA mueve al fondo de utilities más allá de lo que ya capturan CEG y VST?
+
+```{r}
+
+datos3 <- as.data.frame(coredata(na.omit(merge(rend_diario("FSUTX"), rend_diario("DUK"), rend_diario("NEE"),
+                                               rend_diario("CEG"), rend_diario("VST"), rend_diario("NVDA")))))
+dim(datos3)
+
+modeloT3 <- lm(FSUTX ~ DUK + NEE + CEG + VST + NVDA, data = datos3)
+summary(modeloT3)
+
+##  INTERPRETACIÓN MODELO 3
+
+##  RESIDUALES
+##  Van de -2.1% a +1.7%. La mediana es prácticamente 0 y el 50% central está entre -0.21% y +0.23%: son los errores más pequeños de los 3 modelos, como se espera de un sector defensivo.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (-0.00021): no es significativo al 5% (p = 0.097), solo al 10%.
+##  --DUK (0.449): si DUK sube 1%, el fondo sube 0.45%, manteniendo constantes las demás. Es la mayor exposición.
+##  --NEE (0.238): si NEE sube 1%, el fondo sube 0.24%.
+##  --VST (0.097) y CEG (0.083): si suben 1%, el fondo sube ~0.1%.
+##  --NVDA (0.0045): si NVDA sube 1%, el fondo sube apenas 0.005%. Es prácticamente cero.
+##  --Los coeficientes de DUK, NEE, CEG y VST casi no cambian frente al modelo sin NVDA: agregar NVDA no altera nada.
+
+##  SIGNIFICANCIAS
+##  DUK (t = 30.6), NEE (25.5), VST (16.6) y CEG (13.6) son significativas con p < 2e-16.
+##  NVDA NO es significativa: t = 0.96, p = 0.336. No se rechaza H0: su coeficiente podría ser 0.
+##  Respuesta a la pregunta del modelo: la relación del fondo con la IA ya está capturada por CEG y VST (que se correlacionan 0.38 y 0.42 con NVDA). Una vez que están en el modelo, NVDA no agrega nada.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.003794: el modelo se equivoca en promedio 0.38% diario.
+
+##  R CUADRADA
+##  R2 = 0.8707 y R2 ajustada = 0.8700: el modelo explica el 87% de los movimientos del fondo.
+##  Este aumento frente al 84% de la Tarea 2 viene del precio ajustado, no de NVDA: sin NVDA la R2 es prácticamente la misma (0.8706).
+
+##  ESTADÍSTICO F
+##  F = 1266, p < 2.2e-16: el modelo en conjunto es significativo.
+
+
+modeloT3_4 <- lm(FSUTX ~ DUK + NEE + CEG + VST, data = datos3)
+anova(modeloT3_4, modeloT3)
+
+##  H0: el coeficiente de NVDA es 0. La suma de residuales al cuadrado casi no cambia (0.013542 vs 0.013528).
+##  F = 0.93, p = 0.336: NO se rechaza H0. NVDA no vale la pena; el mejor modelo para utilities es el de 4 acciones.
+##  Igual que en el modelo 1, la F es la t de NVDA al cuadrado (0.964^2 = 0.93).
+
+```
+
+
+##  INTERVALOS DE CONFIANZA
+```{r}
+
+confint(modeloT1, level = 0.95)
+
+##  MODELO 1
+##  --NVDA [0.243, 0.289], AVGO [0.169, 0.214], AMD [0.106, 0.143], MU [0.144, 0.178], TSM [0.145, 0.208].
+##  --Ningún intervalo de las acciones incluye el 0: todas tienen un efecto real sobre el fondo.
+##  --El intervalo de NVDA está completamente por arriba de los demás: con 95% de confianza, es la acción que más mueve al fondo.
+##  --Intercepto [-0.00105, -0.00009]: no incluye el 0, así que el rendimiento negativo del fondo frente a sus acciones es significativo.
+
+confint(modeloT2, level = 0.95)
+
+##  MODELO 2
+##  --LLY [0.096, 0.136], UNH [0.106, 0.144], ISRG [0.103, 0.146], VRTX [0.063, 0.112], TMO [0.208, 0.259].
+##  --Ningún intervalo de las acciones incluye el 0.
+##  --El intervalo de TMO no se cruza con ningún otro: con 95% de confianza, TMO es la acción que más mueve al fondo. LLY, UNH e ISRG se cruzan entre sí: tienen un peso parecido.
+##  --Intercepto [-0.00035, 0.00045]: incluye el 0, no hay rendimiento extra ni faltante.
+
+confint(modeloT3, level = 0.95)
+
+##  MODELO 3
+##  --DUK [0.420, 0.477], NEE [0.220, 0.257], CEG [0.071, 0.095], VST [0.086, 0.109].
+##  --NVDA [-0.0047, 0.0138]: INCLUYE el 0, lo que confirma que NVDA no tiene un efecto significativo sobre el fondo.
+##  --Intercepto [-0.00045, 0.00004]: incluye el 0 (por poco).
+
+```
+
+
+##  SEGUNDA PARTE: DETECCIÓN DE VIOLACIÓN DE SUPUESTOS
+
+
+##  MULTICOLINEALIDAD
+```{r}
+
+cor(datos1)
+vif(modeloT1)
+
+##  MODELO 1: las correlaciones entre las acciones van de 0.49 a 0.67; la más alta es TSM-NVDA (0.67).
+##  VIF entre 1.79 y 2.56. El más alto es TSM (2.56), porque se mueve parecido a las otras 4, pero todos están por debajo de 5: NO hay multicolinealidad problemática.
+
+cor(datos2)
+vif(modeloT2)
+
+##  MODELO 2: las correlaciones entre las acciones son bajas (0.05 a 0.33). VIF entre 1.03 y 1.20: prácticamente no hay multicolinealidad.
+##  TMO aporta información nueva porque casi no se parece a las otras 4 (correlación máxima 0.29).
+
+cor(datos3)
+vif(modeloT3)
+
+##  MODELO 3: la correlación más alta sigue siendo CEG-VST (0.76). NVDA se correlaciona con CEG (0.38) y VST (0.42), y negativamente con DUK (-0.24).
+##  VIF entre 1.33 y 2.47, todos menores a 5: NO hay multicolinealidad problemática.
+##  CONCLUSIÓN: ningún modelo necesita corrección por multicolinealidad.
+
+```
+
+
+##  HETEROCEDASTICIDAD
+```{r}
+
+bptest(modeloT1)
+gqtest(modeloT1, order.by = ~ FSELX, data = datos1)
+
+##  MODELO 1
+##  Breusch-Pagan: BP = 19.90, p = 0.001 < 0.05. Se rechaza H0 de homocedasticidad.
+##  Goldfeld-Quandt: GQ = 1.34, p = 0.0009 < 0.05. Se rechaza H0: la varianza de los errores es 34% mayor en los días de rendimiento alto del fondo.
+##  Ambas pruebas coinciden: HAY heterocedasticidad.
+
+bptest(modeloT2)
+gqtest(modeloT2, order.by = ~ FSPHX, data = datos2)
+
+##  MODELO 2
+##  Breusch-Pagan: BP = 21.46, p = 0.0007 < 0.05. Se rechaza H0: hay heterocedasticidad.
+##  Goldfeld-Quandt: GQ = 1.03, p = 0.391 > 0.05. No se rechaza H0 con este orden.
+##  BP la detecta y GQ no: BP revisa si la varianza depende de cualquiera de las acciones, y GQ solo revisa si crece conforme sube el rendimiento del fondo.
+
+bptest(modeloT3)
+gqtest(modeloT3, order.by = ~ FSUTX, data = datos3)
+
+##  MODELO 3
+##  Breusch-Pagan: BP = 52.79, p = 3.7e-10. Se rechaza H0: hay heterocedasticidad, la más fuerte de los 3 modelos.
+##  Goldfeld-Quandt: GQ = 0.81, p = 0.988. No se rechaza H0. Un GQ menor a 1 indica que la varianza es mayor en los días de caída del fondo, no en los de subida.
+##  CONCLUSIÓN: Breusch-Pagan detecta heterocedasticidad en los 3 modelos. Los coeficientes siguen siendo confiables, pero los errores estándar no; se corrige en la tercera parte.
+
+```
+
+
+##  AUTOCORRELACIÓN
+```{r}
+
+dwtest(modeloT1, alternative = "two.sided")
+dwtest(modeloT2, alternative = "two.sided")
+dwtest(modeloT3, alternative = "two.sided")
+
+##  H0: no hay autocorrelación. Un DW cercano a 2 indica que no hay autocorrelación.
+##  MODELO 1: DW = 2.006, p = 0.922. No se rechaza H0.
+##  MODELO 2: DW = 2.105, p = 0.107. No se rechaza H0.
+##  MODELO 3: DW = 2.012, p = 0.855. No se rechaza H0.
+##  CONCLUSIÓN: no hay autocorrelación en ningún modelo. El error de un día no ayuda a predecir el del día siguiente, igual que en los modelos diarios de la actividad 3.
+
+```
+
+
+##  NORMALIDAD Y ANÁLISIS GRÁFICO DE RESIDUALES
+```{r}
+
+shapiro.test(residuals(modeloT1))
+shapiro.test(residuals(modeloT2))
+shapiro.test(residuals(modeloT3))
+
+##  H0: los residuales siguen una distribución normal.
+##  MODELO 1: W = 0.981, p = 9.5e-10. MODELO 2: W = 0.987, p = 1.2e-07. MODELO 3: W = 0.978, p = 1.2e-10.
+##  En los 3 casos se rechaza H0: los residuales NO son normales.
+
+par(mfrow = c(1, 3))
+hist(residuals(modeloT1), breaks = 50, main = "Residuales Modelo 1", xlab = "")
+hist(residuals(modeloT2), breaks = 50, main = "Residuales Modelo 2", xlab = "")
+hist(residuals(modeloT3), breaks = 50, main = "Residuales Modelo 3", xlab = "")
+par(mfrow = c(1, 1))
+
+##  Los histogramas están centrados en 0 y tienen forma de campana, pero son más "picudos" que una normal y con colas más largas: muchos días con errores casi nulos y algunos días con errores grandes. Es típico de los rendimientos de acciones.
+##  Con 946 observaciones, las pruebas t y F siguen siendo aproximadamente válidas aunque no haya normalidad (muestra grande).
+
+```
+
+
+##  TERCERA PARTE: CORRECCIÓN
+
+##  Corrección de heterocedasticidad y autocorrelación: errores estándar robustos de Newey-West.
+##  Los coeficientes no cambian; se corrigen los errores estándar, las pruebas t y los intervalos de confianza.
+```{r}
+
+coeftest(modeloT1, vcov = NeweyWest(modeloT1))
+
+##  MODELO 1: los errores estándar aumentan (por ejemplo, AVGO pasa de 0.0116 a 0.0216) y los t bajan, pero todas las acciones siguen siendo significativas con p < 0.001.
+##  El intercepto sigue siendo significativo (p = 0.012): el rendimiento negativo del fondo frente a sus acciones se mantiene después de corregir.
+
+coeftest(modeloT2, vcov = NeweyWest(modeloT2))
+
+##  MODELO 2: los t bajan (ISRG pasa de 11.5 a 5.5), pero las 5 acciones siguen siendo significativas con p < 0.001. Las conclusiones no cambian.
+
+coeftest(modeloT3, vcov = NeweyWest(modeloT3))
+
+##  MODELO 3: DUK, NEE, CEG y VST siguen siendo significativas. NVDA sigue sin serlo (p = 0.427).
+##  CONCLUSIÓN DE LA CORRECCIÓN: la heterocedasticidad hacía que los errores estándar originales fueran demasiado pequeños, pero aun corregidos, las conclusiones de los 3 modelos se mantienen.
+##  Corrección de especificación: en el modelo 3 se recomienda quitar NVDA (no es significativa y la prueba F indica que no aporta) y usar el modelo de 4 acciones.
+##  No se requiere corrección por multicolinealidad (todos los VIF menores a 5) ni por autocorrelación (DW cercano a 2).
+
+```
+
+
+##  CUARTA PARTE: PREGUNTAS 12.1 A 12.3 DEL CAPÍTULO 12 DE GUJARATI (AUTOCORRELACIÓN)
+
+
+##  PREGUNTA 12.1
+##  Establezca si las siguientes afirmaciones son verdaderas o falsas. Justifique su respuesta brevemente.
+
+##  a) Cuando hay presencia de autocorrelación, los estimadores de MCO son sesgados e ineficientes.
+##  FALSO. Con autocorrelación, los estimadores de MCO siguen siendo insesgados; lo que pierden es la eficiencia (ya no son los de menor varianza, es decir, dejan de ser MELI). El problema está en los errores estándar, no en los coeficientes.
+
+##  b) La prueba d de Durbin-Watson supone que la varianza del término de error u_t es homoscedástica.
+##  VERDADERO. La prueba d se basa en los supuestos del modelo clásico, entre ellos que la varianza de los errores sea constante. Si hay heterocedasticidad, el d puede confundirla con autocorrelación.
+
+##  c) La transformación de primeras diferencias para eliminar la autocorrelación supone que el coeficiente de autocorrelación rho es -1.
+##  FALSO. Supone que rho = +1. Las primeras diferencias (Y_t - Y_(t-1)) son el caso de la ecuación en diferencias generalizada (Y_t - rho*Y_(t-1)) cuando rho = 1, es decir, autocorrelación positiva perfecta.
+
+##  d) Los valores R2 de dos modelos, uno en primeras diferencias y otro en niveles, no son directamente comparables.
+##  VERDADERO. La R2 mide qué proporción de la variación de la variable dependiente explica el modelo, y en cada caso la variable dependiente es distinta (Y_t contra la diferencia de Y_t). Por eso no se pueden comparar.
+
+##  e) Un d de Durbin-Watson significativo no necesariamente denota autocorrelación de primer orden.
+##  VERDADERO. Un d significativo también puede deberse a un error de especificación, como omitir una variable importante o usar una forma funcional incorrecta, que deja un patrón en los residuales.
+
+##  f) En presencia de autocorrelación, las varianzas calculadas convencionalmente y los errores estándar de los valores pronosticados son ineficientes.
+##  VERDADERO. Las fórmulas normales de MCO no toman en cuenta que los errores están correlacionados, así que las varianzas y los errores estándar de los pronósticos salen incorrectos (por lo general, demasiado pequeños).
+
+##  g) La exclusión de una o varias variables importantes de un modelo de regresión puede producir un valor d significativo.
+##  VERDADERO. Si se omite una variable relevante, su efecto se va al término de error y genera un patrón en los residuales que el d detecta como autocorrelación.
+
+##  h) En el esquema AR(1), una prueba de hipótesis de que rho = 1 puede hacerse mediante el estadístico g de Berenblutt-Webb, lo mismo que con el estadístico d de Durbin-Watson.
+##  VERDADERO. El estadístico g de Berenblutt-Webb sirve para probar H0: rho = 1 y se evalúa con las mismas tablas de Durbin-Watson (límites dL y dU).
+
+##  i) En la regresión de primeras diferencias de Y sobre primeras diferencias de X, si hay un término constante y un término de tendencia lineal, significa que en el modelo original hay un término de tendencia lineal y uno de tendencia cuadrática.
+##  VERDADERO. Si el modelo original es Y_t = b1 + b2*t + b3*t^2 + b4*X_t + u_t, al sacar primeras diferencias la tendencia lineal (b2*t) se convierte en una constante y la cuadrática (b3*t^2) en una tendencia lineal.
+
+
+##  PREGUNTA 12.2
+##  Con una muestra de 50 observaciones y 4 variables explicativas, ¿qué puede decir sobre autocorrelación si a) d = 1.05, b) d = 1.40, c) d = 2.50 y d) d = 3.97?
+
+##  Datos: n = 50, k' = 4 variables explicativas, nivel de significancia del 5%.
+##  Valores críticos (Gujarati, tabla D.5A): dL = 1.378 y dU = 1.721. Entonces 4 - dU = 2.279 y 4 - dL = 2.622.
+##  Regla de decisión (figura 12.10):
+##  0 < d < dL: autocorrelación positiva | dL < d < dU: zona de indecisión | dU < d < 4 - dU: no hay autocorrelación | 4 - dU < d < 4 - dL: zona de indecisión | 4 - dL < d < 4: autocorrelación negativa.
+
+##  a) d = 1.05 < dL = 1.378: hay autocorrelación POSITIVA.
+##  b) d = 1.40 está entre dL = 1.378 y dU = 1.721: ZONA DE INDECISIÓN. No se puede concluir.
+##  c) d = 2.50 está entre 4 - dU = 2.279 y 4 - dL = 2.622: ZONA DE INDECISIÓN. No se puede concluir.
+##  d) d = 3.97 > 4 - dL = 2.622: hay autocorrelación NEGATIVA.
+
+
+##  PREGUNTA 12.3
+##  Modelo A: Y_t = b0 + b1*t + u_t | Modelo B: Y_t = a0 + a1*t + a2*t^2 + u_t, con datos anuales de 1949 a 1964 (n = 16).
+##  Modelo A: R2 = 0.5284, d = 0.8252. Modelo B: R2 = 0.6629, d = 1.82.
+
+##  a) ¿Hay correlación serial en el modelo A? ¿En el modelo B?
+##  Modelo A (n = 16, k' = 1): dL = 1.106 y dU = 1.371. Como d = 0.8252 < dL, hay autocorrelación POSITIVA.
+##  Modelo B (n = 16, k' = 2): dL = 0.982, dU = 1.539 y 4 - dU = 2.461. Como d = 1.82 está entre 1.539 y 2.461, NO hay autocorrelación.
+
+##  b) ¿Qué explica la correlación serial?
+##  Que al modelo A le falta el término t^2. En el modelo B, t^2 es significativo (t = 2.78), así que en el modelo A su efecto se queda en el error y genera un patrón en los residuales. Al incluir t^2, la autocorrelación desaparece (d pasa de 0.83 a 1.82). Es un error de especificación, no autocorrelación "pura".
+
+##  c) ¿Cómo distinguiría entre autocorrelación "pura" y sesgo de especificación?
+##  Primero se corrige la especificación del modelo (agregar las variables que podrían faltar o cambiar la forma funcional, como agregar t^2) y se vuelve a calcular el d.
+##  Si la autocorrelación desaparece, era sesgo de especificación. Si se mantiene con el modelo bien especificado, es autocorrelación pura y se corrige con métodos como la ecuación en diferencias generalizada o errores estándar de Newey-West.
+##  También ayuda graficar los residuales contra el tiempo: si forman una curva, es señal de que falta una variable o un término.
+
+
+##  QUINTA PARTE: ESTRATEGIA EN HOWTHEMARKETWORKS
+
+##  SITUACIÓN ACTUAL (10-oct-2026)
+##  Valor del portafolio: USD 1,000,568 (rendimiento de 0.06% contra 0.93% del SPY desde el inicio). Efectivo: USD 847,690. Posiciones: USD 152,878.
+##  Cada sector tiene ~USD 25,000 en el mutual fund y ~USD 25,000 en la réplica. Como las compras se hicieron por número de acciones y los precios se han movido, las réplicas valen hoy: semis USD 24,851, salud USD 27,190 y utilities USD 26,434.
+
+##  AJUSTE EN FUNCIÓN DE LOS NUEVOS MODELOS: SE AGREGAN TSM Y TMO A LAS RÉPLICAS (SIN VENDER POSICIONES)
+##  Se mantienen todas las posiciones actuales y se usa parte del efectivo para agregar la acción nueva de cada modelo. El monto se calcula para que la acción nueva quede con el peso que le da el modelo dentro de la réplica ampliada: monto = valor actual de la réplica x peso / (1 - peso).
+
+##  SEMICONDUCTORES (réplica actual de USD 24,851): se agrega TSM porque es significativa y la prueba F confirma que mejora el modelo (R2 de 86% a 90%).
+##  --Peso de TSM según el modelo: 19.2% (0.176 / 0.919).
+##  --Comprar TSM por USD 5,900 (24,851 x 0.192 / 0.808). La réplica queda en ~USD 30,750 con TSM al 19.2%.
+
+##  SALUD (réplica actual de USD 27,190): se agrega TMO porque es la acción que más mueve al fondo (coeficiente 0.233) y sube la R2 de 40% a 62%.
+##  --Peso de TMO según el modelo: 34.0% (0.233 / 0.686).
+##  --Comprar TMO por USD 14,000 (27,190 x 0.34 / 0.66). La réplica queda en ~USD 41,200 con TMO al 34%.
+
+##  UTILITIES (réplica actual de USD 26,434): no se agrega NVDA porque no es significativa (p = 0.336) y la prueba F indica que no aporta. Además, los pesos actuales (DUK 49.9%, NEE 26.6%, VST 12.2%, CEG 11.3%) están a menos de 2 puntos de los del modelo (51.7%, 27.5%, 11.2%, 9.6%), así que no se hacen operaciones.
+
+##  FONDOS: se mantienen los 3 mutual funds como punto de comparación. FSELX tiene un intercepto negativo y significativo (rinde ~0.057% diario menos que sus acciones), por lo que se espera que la réplica de semis le gane al fondo.
+##  Inversión adicional total: ~USD 19,900, que sale del efectivo (queda ~USD 827,800).
+
+##  (screenshots de las operaciones en HowTheMarketWorks)

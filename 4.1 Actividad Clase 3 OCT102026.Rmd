@@ -1,0 +1,577 @@
+---
+title: "5 Actividad Clase 3 OCT102026"
+output:
+  html_document: default
+  pdf_document: default
+date: "2026-10-10"
+---
+
+
+##  OBJETIVO DE LA ACTIVIDAD
+##  Re-estimar los 3 modelos de regresión múltiple de la Tarea 2 con datos intradía de Refinitiv (LSEG) en velas de 1 y 5 minutos para el 8 y 9 de octubre de 2026, y comparar los resultados contra los modelos originales diarios (enero 2023 - octubre 2026).
+##  Los mutual funds FSELX, FSPHX y FSUTX no tienen precios intradía (calculan su NAV una sola vez al día, al cierre), por lo que en los modelos intradía se usa como variable dependiente el ETF del mismo sector: SMH (semiconductores), XLV (salud) y XLU (utilities). Las variables independientes son las mismas acciones de la Tarea 2.
+##  Se eligieron 1 y 5 minutos porque con 30 minutos solo habría 26 observaciones en 2 días (~21 grados de libertad para estimar 5 coeficientes), insuficientes para que las pruebas de hipótesis y de supuestos sean confiables.
+
+
+##  LIBRERIAS RELEVANTES
+```{r}
+library(MASS)
+library(ISLR)
+library(quantmod)
+library(car)
+library(lmtest)
+library(readxl)
+```
+
+
+##  PRIMERA PARTE: MODELOS ORIGINALES DIARIOS (TAREA 2)
+
+
+```{r}
+
+##  MODELO 1 DIARIO: FSELX ~ NVDA + AVGO + AMD + MU
+
+getSymbols("FSELX", from = "2023-01-01")
+fselx_close <- (FSELX$FSELX.Close)
+fselx_returns_daily <- dailyReturn(fselx_close)
+
+getSymbols("NVDA", from = "2023-01-01")
+nvda_close <- (NVDA$NVDA.Close)
+nvda_returns_daily <- dailyReturn(nvda_close)
+
+getSymbols("AVGO", from = "2023-01-01")
+avgo_close <- (AVGO$AVGO.Close)
+avgo_returns_daily <- dailyReturn(avgo_close)
+
+getSymbols("AMD", from = "2023-01-01")
+amd_close <- (AMD$AMD.Close)
+amd_returns_daily <- dailyReturn(amd_close)
+
+getSymbols("MU", from = "2023-01-01")
+mu_close <- (MU$MU.Close)
+mu_returns_daily <- dailyReturn(mu_close)
+
+modeloMF1 <- lm(fselx_returns_daily ~ nvda_returns_daily + avgo_returns_daily + amd_returns_daily + mu_returns_daily)
+
+summary(modeloMF1)
+
+##  RESUMEN DEL MODELO DIARIO (INTERPRETADO A DETALLE EN LA TAREA 2; LOS VALORES PUEDEN VARIAR LIGERAMENTE POR LOS DÍAS ADICIONALES DESCARGADOS)
+##  940 observaciones diarias. NVDA 0.311, AVGO 0.219, AMD 0.142, MU 0.183 (suma = 0.856), todas significativas al 0.1%.
+##  Intercepto -0.000834 significativo al 1% (alfa negativo del fondo). R2 = 0.860. Error estándar residual = 0.92% diario.
+
+```
+
+
+```{r}
+
+##  MODELO 2 DIARIO: FSPHX ~ LLY + UNH + ISRG + VRTX
+
+getSymbols("FSPHX", from = "2023-01-01")
+fsphx_close <- (FSPHX$FSPHX.Close)
+fsphx_returns_daily <- dailyReturn(fsphx_close)
+
+getSymbols("LLY", from = "2023-01-01")
+lly_close <- (LLY$LLY.Close)
+lly_returns_daily <- dailyReturn(lly_close)
+
+getSymbols("UNH", from = "2023-01-01")
+unh_close <- (UNH$UNH.Close)
+unh_returns_daily <- dailyReturn(unh_close)
+
+getSymbols("ISRG", from = "2023-01-01")
+isrg_close <- (ISRG$ISRG.Close)
+isrg_returns_daily <- dailyReturn(isrg_close)
+
+getSymbols("VRTX", from = "2023-01-01")
+vrtx_close <- (VRTX$VRTX.Close)
+vrtx_returns_daily <- dailyReturn(vrtx_close)
+
+modeloMF2 <- lm(fsphx_returns_daily ~ lly_returns_daily + unh_returns_daily + isrg_returns_daily + vrtx_returns_daily)
+
+summary(modeloMF2)
+
+##  RESUMEN DEL MODELO DIARIO (INTERPRETADO A DETALLE EN LA TAREA 2; LOS VALORES PUEDEN VARIAR LIGERAMENTE POR LOS DÍAS ADICIONALES DESCARGADOS)
+##  LLY 0.143, UNH 0.140, ISRG 0.168, VRTX 0.130 (suma = 0.581), todas significativas al 0.1%. Exposición equilibrada entre subsectores.
+##  Intercepto no significativo (p = 0.372). R2 = 0.404: el fondo está diversificado y 4 acciones no lo replican.
+
+```
+
+
+```{r}
+
+##  MODELO 3 DIARIO: FSUTX ~ DUK + NEE + CEG + VST
+
+getSymbols("FSUTX", from = "2023-01-01")
+fsutx_close <- (FSUTX$FSUTX.Close)
+fsutx_returns_daily <- dailyReturn(fsutx_close)
+
+getSymbols("DUK", from = "2023-01-01")
+duk_close <- (DUK$DUK.Close)
+duk_returns_daily <- dailyReturn(duk_close)
+
+getSymbols("NEE", from = "2023-01-01")
+nee_close <- (NEE$NEE.Close)
+nee_returns_daily <- dailyReturn(nee_close)
+
+getSymbols("CEG", from = "2023-01-01")
+ceg_close <- (CEG$CEG.Close)
+ceg_returns_daily <- dailyReturn(ceg_close)
+
+getSymbols("VST", from = "2023-01-01")
+vst_close <- (VST$VST.Close)
+vst_returns_daily <- dailyReturn(vst_close)
+
+modeloMF3 <- lm(fsutx_returns_daily ~ duk_returns_daily + nee_returns_daily + ceg_returns_daily + vst_returns_daily)
+
+summary(modeloMF3)
+
+##  RESUMEN DEL MODELO DIARIO (INTERPRETADO A DETALLE EN LA TAREA 2; LOS VALORES PUEDEN VARIAR LIGERAMENTE POR LOS DÍAS ADICIONALES DESCARGADOS)
+##  DUK 0.445, NEE 0.243, CEG 0.084, VST 0.096 (suma = 0.868), todas significativas al 0.1%. Domina el bloque de utilities clásicas.
+##  Intercepto marginal (p = 0.050). R2 = 0.842. Error estándar residual = 0.43% diario. Con los días adicionales descargados (946 observaciones, 941 gl) los valores cambian solo marginalmente frente a la Tarea 2.
+
+```
+
+
+```{r}
+
+##  DURBIN-WATSON DE LOS MODELOS DIARIOS (PARA COMPARAR CONTRA LOS INTRADÍA)
+##  H0: no hay autocorrelación de primer orden en los residuales. DW cercano a 2 = sin autocorrelación; DW < 2 sugiere autocorrelación positiva y DW > 2 negativa.
+
+##  Nota técnica: dwtest() aplicado directamente a modeloMF1, modeloMF2 y modeloMF3 devuelve NA porque los rendimientos son objetos xts: los residuales conservan el formato de serie de tiempo y la diferencia entre residuales consecutivos genera un NA en la primera fecha, lo que vuelve NA todo el estadístico.
+##  Se re-estiman los mismos modelos con coredata(), que extrae solo los valores numéricos. Los coeficientes son idénticos; solo cambia el formato de los datos.
+
+modeloMF1_dw <- lm(coredata(fselx_returns_daily) ~ coredata(nvda_returns_daily) + coredata(avgo_returns_daily) + coredata(amd_returns_daily) + coredata(mu_returns_daily))
+dwtest(modeloMF1_dw)
+dwtest(modeloMF1_dw, alternative = "two.sided")
+
+modeloMF2_dw <- lm(coredata(fsphx_returns_daily) ~ coredata(lly_returns_daily) + coredata(unh_returns_daily) + coredata(isrg_returns_daily) + coredata(vrtx_returns_daily))
+dwtest(modeloMF2_dw)
+dwtest(modeloMF2_dw, alternative = "two.sided")
+
+modeloMF3_dw <- lm(coredata(fsutx_returns_daily) ~ coredata(duk_returns_daily) + coredata(nee_returns_daily) + coredata(ceg_returns_daily) + coredata(vst_returns_daily))
+dwtest(modeloMF3_dw)
+dwtest(modeloMF3_dw, alternative = "two.sided")
+
+##  MODELO 1 DIARIO: DW = 2.0067; p = 0.541 contra autocorrelación positiva y p = 0.917 en dos colas. No se rechaza H0: no hay autocorrelación.
+##  MODELO 2 DIARIO: DW = 2.0634; p = 0.835 contra autocorrelación positiva y p = 0.330 en dos colas. No se rechaza H0: no hay autocorrelación.
+##  MODELO 3 DIARIO: DW = 1.9946; p = 0.469 contra autocorrelación positiva y p = 0.937 en dos colas. No se rechaza H0: no hay autocorrelación.
+##  Los 3 DW están prácticamente en 2: en datos diarios los errores de un día no ayudan a predecir los del día siguiente, consistente con eficiencia débil del mercado (igual que el resultado de TSLA visto en clase). El supuesto de independencia de los errores se cumple en los modelos diarios.
+
+```
+
+
+##  SEGUNDA PARTE: MODELOS INTRADÍA CON DATOS DE REFINITIV (1 Y 5 MINUTOS)
+
+
+```{r}
+
+##  IMPORTAMOS LOS PRECIOS INTRADÍA DE REFINITIV (8 Y 9 DE OCTUBRE DE 2026)
+##  Sesión regular de 7:30 a 14:00 hora de Monterrey (9:30 a 16:00 hora de Nueva York). Se excluyen pre-market y after-hours.
+##  Si un ticker no tuvo operación en algún minuto, se repite el último precio del mismo día (rendimiento = 0). Esto ocurrió solo en 1 minuto y sobre todo en RICs de NYSE (DUK 155 velas, LLY 140); en 5 minutos no faltó ninguna vela.
+
+precios_1m <- read_excel("Intradia_Refinitiv_Actividad3.xlsx", sheet = "Precios_1min")
+precios_5m <- read_excel("Intradia_Refinitiv_Actividad3.xlsx", sheet = "Precios_5min")
+
+##  RENDIMIENTOS SIMPLES INTRADÍA, EXCLUYENDO EL SALTO ENTRE EL CIERRE DEL 8 Y LA APERTURA DEL 9
+##  El rendimiento entre el cierre de un día y la apertura del siguiente no es intradía (incluye la noche), por lo que se elimina para no introducir un atípico.
+
+rend_intradia <- function(precios) {
+  p <- as.matrix(precios[, -1])
+  r <- p[-1, ] / p[-nrow(p), ] - 1
+  mismo_dia <- as.Date(precios$Fecha_hora[-1]) == as.Date(precios$Fecha_hora[-nrow(p)])
+  as.data.frame(r[mismo_dia, ])
+}
+
+rend_1m <- rend_intradia(precios_1m)
+rend_5m <- rend_intradia(precios_5m)
+
+dim(rend_1m)
+dim(rend_5m)
+
+##  1 minuto: 778 rendimientos (2 días x 390 velas, menos el primer rendimiento de cada día). 5 minutos: 154 rendimientos (2 x 78 - 2).
+##  Frente a las 940 observaciones diarias, la muestra intradía cubre solo 2 días: los modelos miden la relación de muy corto plazo, no la de mediano plazo.
+
+```
+
+
+```{r}
+
+##  MODELO 1 INTRADÍA: SEMICONDUCTORES (SMH ~ NVDA + AVGO + AMD + MU)
+
+modeloI1_1m <- lm(SMH ~ NVDA + AVGO + AMD + MU, data = rend_1m)
+summary(modeloI1_1m)
+
+##  INTERPRETACIÓN MODELO 1 - 1 MINUTO
+
+##  RESIDUALES
+##  Van de -0.00174 (-0.17%) a +0.00213 (+0.21%) por minuto. La mediana es -0.0000076 (~0): el modelo no sobreestima ni subestima de forma sistemática.
+##  El 50% central está entre -0.017% y +0.017%: errores pequeños y simétricos. Los extremos son ~10 veces el rango intercuartil, lo que indica colas gordas, típicas de datos de alta frecuencia.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.000014): rendimiento esperado de SMH por minuto si las 4 acciones no se mueven. No es significativo (p = 0.234): no hay alfa intradía.
+##  --NVDA (0.359): si NVDA sube 1 pp en un minuto, SMH sube 0.359 pp en ese mismo minuto, manteniendo constantes AVGO, AMD y MU. Es la mayor exposición.
+##  --AVGO (0.213), AMD (0.208) y MU (0.201): exposiciones muy parecidas entre sí, de ~0.2 pp por cada 1 pp.
+##  --Suma de pendientes = 0.981: si las 4 suben 1% en el mismo minuto, SMH sube ~0.98%. El ETF es casi tan sensible como la canasta de las 4 acciones.
+
+##  SIGNIFICANCIAS
+##  t: NVDA 14.53, AVGO 11.94, AMD 14.60, MU 14.39; todas muy por arriba de 1.96 y p < 2e-16. Se rechaza H0: beta_i = 0 para las 4 acciones.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.0003276 con 773 gl: el rendimiento estimado se desvía en promedio 0.033% por minuto del observado.
+
+##  R CUADRADA
+##  R2 = 0.8414 y R2 ajustada = 0.8406: las 4 acciones explican el 84% de los movimientos minuto a minuto de SMH.
+
+##  ESTADÍSTICO F
+##  F = 1025 con (4, 773) gl, p < 2.2e-16, muy arriba de la F crítica de 2.38. El modelo es significativo en conjunto.
+
+
+modeloI1_5m <- lm(SMH ~ NVDA + AVGO + AMD + MU, data = rend_5m)
+summary(modeloI1_5m)
+
+##  INTERPRETACIÓN MODELO 1 - 5 MINUTOS
+
+##  RESIDUALES
+##  Van de -0.0034 (-0.34%) a +0.0021 (+0.21%). La mediana es -0.00004 (~0). El 50% central está entre -0.030% y +0.040%.
+##  La cola izquierda es 1.6 veces la derecha: hubo velas de 5 minutos en que SMH cayó más de lo que explican sus 4 acciones.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.00007): no significativo (p = 0.205). No hay alfa intradía.
+##  --NVDA (0.224): +1 pp en NVDA en 5 minutos -> +0.224 pp en SMH, ceteris paribus. Baja frente a 1 minuto (0.359).
+##  --AVGO (0.301) y AMD (0.290): pasan a ser las mayores exposiciones.
+##  --MU (0.165): la menor exposición.
+##  --Suma de pendientes = 0.980, prácticamente igual que en 1 minuto: la sensibilidad total del ETF es estable; lo que cambia es cómo se reparte entre las acciones.
+
+##  SIGNIFICANCIAS
+##  t: NVDA 3.71 (p = 0.0003), AVGO 6.73, AMD 8.24, MU 5.18; todas significativas al 0.1%.
+##  Los t son mucho menores que en 1 minuto porque hay 154 observaciones en vez de 778: con menos datos, los errores estándar son mayores (NVDA: 0.060 vs 0.025).
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.0006783 con 149 gl: error promedio de 0.068% por vela de 5 minutos.
+##  Es ~2.1 veces el de 1 minuto, muy cerca de raíz(5) = 2.24: el error crece con la raíz del tiempo, como se espera si los errores minuto a minuto son casi independientes.
+
+##  R CUADRADA
+##  R2 = 0.8744 y R2 ajustada = 0.8710: sube de 84% (1 min) a 87% (5 min).
+
+##  ESTADÍSTICO F
+##  F = 259.3 con (4, 149) gl, p < 2.2e-16 (F crítica = 2.43). El modelo es significativo en conjunto.
+
+```
+
+
+```{r}
+
+##  MODELO 2 INTRADÍA: SALUD (XLV ~ LLY + UNH + ISRG + VRTX)
+
+modeloI2_1m <- lm(XLV ~ LLY + UNH + ISRG + VRTX, data = rend_1m)
+summary(modeloI2_1m)
+
+##  INTERPRETACIÓN MODELO 2 - 1 MINUTO
+
+##  RESIDUALES
+##  Van de -0.00173 (-0.17%) a +0.00101 (+0.10%). La mediana es -0.000004 (~0) y el 50% central está entre -0.017% y +0.016%: errores pequeños y simétricos.
+##  La cola izquierda es 1.7 veces la derecha: hay minutos en que XLV cae más de lo que explican estas 4 acciones.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.00001): no significativo (p = 0.319).
+##  --LLY (0.248): +1 pp en LLY en un minuto -> +0.248 pp en XLV, ceteris paribus. Es la mayor exposición, consistente con que LLY es una de las mayores posiciones del ETF.
+##  --UNH (0.167): +1 pp en UNH -> +0.167 pp en XLV.
+##  --VRTX (0.118) e ISRG (0.093): exposiciones menores.
+##  --Suma de pendientes = 0.626: el resto del movimiento de XLV depende de otras empresas del ETF.
+
+##  SIGNIFICANCIAS
+##  t: LLY 22.00, UNH 17.72, ISRG 8.34, VRTX 11.64; todas con p < 1e-15. Se rechaza H0: beta_i = 0 para las 4 acciones.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.0002804 con 773 gl: error promedio de 0.028% por minuto.
+
+##  R CUADRADA
+##  R2 = 0.6581 y R2 ajustada = 0.6563: las 4 acciones explican el 66% de los movimientos de XLV por minuto.
+##  Es la R2 más baja de los modelos de 1 minuto. Influye que en 1 minuto hay muchos rendimientos en cero por minutos sin cambio de precio (UNH tiene 153 ceros y LLY 140 velas sin operación, que se rellenaron con el precio anterior). Esos ceros no reflejan el movimiento real y debilitan la relación con XLV.
+
+##  ESTADÍSTICO F
+##  F = 371.9 con (4, 773) gl, p < 2.2e-16. El modelo es significativo en conjunto.
+
+
+modeloI2_5m <- lm(XLV ~ LLY + UNH + ISRG + VRTX, data = rend_5m)
+summary(modeloI2_5m)
+
+##  INTERPRETACIÓN MODELO 2 - 5 MINUTOS
+
+##  RESIDUALES
+##  Van de -0.00183 (-0.18%) a +0.00193 (+0.19%). La mediana es -0.000018 (~0) y el 50% central está entre -0.026% y +0.027%: errores simétricos, sin sesgo.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.00004): no significativo (p = 0.318).
+##  --LLY (0.308): sigue siendo la mayor exposición y aumenta frente a 1 minuto (0.248).
+##  --ISRG (0.163) y VRTX (0.158): suben frente a 1 minuto; a 5 minutos sus movimientos alcanzan a reflejarse en el ETF.
+##  --UNH (0.127): la menor exposición a 5 minutos.
+##  --Suma de pendientes = 0.756 (vs 0.626 en 1 minuto).
+
+##  SIGNIFICANCIAS
+##  t: LLY 14.22, UNH 7.08, ISRG 6.67, VRTX 7.61; todas con p < 1e-9. Se rechaza H0: beta_i = 0 para las 4 acciones.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.000496 con 149 gl: error promedio de 0.050% por vela de 5 minutos.
+
+##  R CUADRADA
+##  R2 = 0.8208 y R2 ajustada = 0.8160: sube de 66% a 82% al pasar de 1 a 5 minutos. Es el mayor aumento de los 3 modelos, porque es el que más sufría por los ceros y el desfase entre acciones en 1 minuto.
+
+##  ESTADÍSTICO F
+##  F = 170.6 con (4, 149) gl, p < 2.2e-16. El modelo es significativo en conjunto.
+
+```
+
+
+```{r}
+
+##  MODELO 3 INTRADÍA: UTILITIES (XLU ~ DUK + NEE + CEG + VST)
+
+modeloI3_1m <- lm(XLU ~ DUK + NEE + CEG + VST, data = rend_1m)
+summary(modeloI3_1m)
+
+##  INTERPRETACIÓN MODELO 3 - 1 MINUTO
+
+##  RESIDUALES
+##  Van de -0.00102 (-0.10%) a +0.00077 (+0.08%). La mediana es -0.000005 (~0) y el 50% central está entre -0.013% y +0.015%: son los residuales más pequeños de los 3 modelos, consistente con un sector defensivo de baja volatilidad.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.000002): no significativo (p = 0.775).
+##  --NEE (0.448): +1 pp en NEE en un minuto -> +0.448 pp en XLU, ceteris paribus. Es la mayor exposición a 1 minuto.
+##  --DUK (0.284): +1 pp en DUK -> +0.284 pp en XLU.
+##  --CEG (0.059) y VST (0.064): exposiciones pequeñas por cada 1%, aunque son mucho más volátiles (desviación estándar ~4 veces la de DUK y NEE), por lo que su efecto en un minuto típico sí es relevante.
+##  --Suma de pendientes = 0.854.
+##  --En el modelo diario el orden era el inverso (DUK 0.445 > NEE 0.243). A 1 minuto, DUK tuvo 155 velas sin operación y 207 rendimientos en cero: su precio "se queda atrás" y su coeficiente se subestima, mientras NEE (más líquida en el dato) absorbe ese efecto.
+
+##  SIGNIFICANCIAS
+##  t: DUK 11.59, NEE 21.67, CEG 8.95, VST 7.98; todas con p < 1e-14. Se rechaza H0: beta_i = 0 para las 4 acciones.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.0002313 con 773 gl: error promedio de 0.023% por minuto, el menor de los modelos de 1 minuto.
+
+##  R CUADRADA
+##  R2 = 0.7222 y R2 ajustada = 0.7207: las 4 acciones explican el 72% de los movimientos de XLU por minuto.
+
+##  ESTADÍSTICO F
+##  F = 502.3 con (4, 773) gl, p < 2.2e-16. El modelo es significativo en conjunto.
+
+
+modeloI3_5m <- lm(XLU ~ DUK + NEE + CEG + VST, data = rend_5m)
+summary(modeloI3_5m)
+
+##  INTERPRETACIÓN MODELO 3 - 5 MINUTOS
+
+##  RESIDUALES
+##  Van de -0.00136 (-0.14%) a +0.00112 (+0.11%). La mediana es +0.00002 (~0) y el 50% central está entre -0.019% y +0.019%: errores simétricos y pequeños.
+
+##  COEFICIENTES (ceteris paribus)
+##  --Intercepto (0.000005): no significativo (p = 0.854).
+##  --DUK (0.465): vuelve a ser la mayor exposición; +1 pp en DUK en 5 minutos -> +0.465 pp en XLU, ceteris paribus.
+##  --NEE (0.265), CEG (0.087) y VST (0.048).
+##  --Suma de pendientes = 0.865.
+##  --Los coeficientes a 5 minutos son casi idénticos a los del modelo diario de FSUTX (DUK 0.445, NEE 0.243, CEG 0.084, VST 0.096): con 5 minutos desaparece el problema de liquidez de DUK y la estructura del sector se recupera.
+
+##  SIGNIFICANCIAS
+##  t: DUK 10.44, NEE 5.95, CEG 6.95, VST 3.52 (p = 0.0006); todas significativas al 0.1%. VST es la menos precisa por su alta correlación con CEG.
+
+##  ERROR ESTÁNDAR RESIDUAL
+##  0.0003383 con 149 gl: error promedio de 0.034% por vela de 5 minutos.
+
+##  R CUADRADA
+##  R2 = 0.8685 y R2 ajustada = 0.8649: sube de 72% (1 min) a 87% (5 min), y queda prácticamente igual que el modelo diario (84%).
+
+##  ESTADÍSTICO F
+##  F = 246 con (4, 149) gl, p < 2.2e-16. El modelo es significativo en conjunto.
+
+```
+
+
+```{r}
+
+##  INTERVALOS DE CONFIANZA
+
+confint(modeloI1_1m, level = 0.95)
+confint(modeloI1_5m, level = 0.95)
+
+##  MODELO 1
+##  --1 minuto: NVDA [0.310, 0.407], AVGO [0.178, 0.248], AMD [0.180, 0.236], MU [0.174, 0.229]. El IC de NVDA no se traslapa con los demás: a 1 minuto, NVDA es claramente la mayor exposición.
+##  --5 minutos: NVDA [0.105, 0.343], AVGO [0.212, 0.389], AMD [0.220, 0.359], MU [0.102, 0.228]. Todos se traslapan: con solo 154 observaciones no se puede afirmar que una acción pese más que otra.
+##  --Los IC de 5 minutos son 2 a 2.5 veces más anchos que los de 1 minuto (NVDA: ancho de 0.24 vs 0.10): con menos observaciones, menor precisión.
+##  --Ningún IC de las pendientes contiene el 0: se rechaza H0: beta = 0. Los IC del intercepto sí contienen el 0 en ambas frecuencias: no hay alfa intradía.
+
+confint(modeloI2_1m, level = 0.95)
+confint(modeloI2_5m, level = 0.95)
+
+##  MODELO 2
+##  --1 minuto: LLY [0.226, 0.270], UNH [0.148, 0.185], ISRG [0.071, 0.115], VRTX [0.098, 0.138]. El IC de LLY no se traslapa con ningún otro: es la mayor exposición de XLV.
+##  --5 minutos: LLY [0.265, 0.350], UNH [0.092, 0.163], ISRG [0.114, 0.211], VRTX [0.117, 0.200]. LLY sigue claramente por encima; las otras 3 se traslapan entre sí.
+##  --Ningún IC de las pendientes contiene el 0. El intercepto contiene el 0 en ambas frecuencias.
+
+confint(modeloI3_1m, level = 0.95)
+confint(modeloI3_5m, level = 0.95)
+
+##  MODELO 3
+##  --1 minuto: DUK [0.236, 0.332], NEE [0.407, 0.488], CEG [0.046, 0.072], VST [0.048, 0.079]. NEE es claramente la mayor exposición a esta frecuencia.
+##  --5 minutos: DUK [0.377, 0.553], NEE [0.177, 0.353], CEG [0.062, 0.111], VST [0.021, 0.075]. Se invierte el orden: DUK pasa a ser la mayor exposición, y su IC contiene el coeficiente diario (0.445).
+##  --Ningún IC de las pendientes contiene el 0. El intercepto contiene el 0 en ambas frecuencias.
+
+```
+
+
+```{r}
+
+##  EVALUANDO MULTICOLINEALIDAD
+##  Criterio de clase: VIF = 1 sin correlación, 5 < VIF < 10 moderada, VIF > 10 alta.
+
+cor(rend_1m[, c("SMH", "NVDA", "AVGO", "AMD", "MU")])
+vif(modeloI1_1m)
+cor(rend_5m[, c("SMH", "NVDA", "AVGO", "AMD", "MU")])
+vif(modeloI1_5m)
+
+##  MODELO 1
+##  --1 minuto: correlaciones entre regresores de 0.55 a 0.63; VIF entre 1.87 y 2.00.
+##  --5 minutos: correlaciones de 0.60 a 0.70; VIF entre 2.19 y 2.54.
+##  --No hay multicolinealidad problemática (VIF < 5). Las correlaciones suben al pasar de 1 a 5 minutos (AMD-MU: 0.63 -> 0.70), y con ellas los VIF.
+
+cor(rend_1m[, c("XLV", "LLY", "UNH", "ISRG", "VRTX")])
+vif(modeloI2_1m)
+cor(rend_5m[, c("XLV", "LLY", "UNH", "ISRG", "VRTX")])
+vif(modeloI2_5m)
+
+##  MODELO 2
+##  --1 minuto: correlaciones entre regresores de -0.01 a 0.28; ISRG prácticamente no se correlaciona con LLY (-0.009) ni con VRTX (-0.008). VIF entre 1.03 y 1.10.
+##  --5 minutos: correlaciones de -0.01 a 0.43; VIF entre 1.05 y 1.28.
+##  --Prácticamente no hay multicolinealidad, igual que en el modelo diario: los subsectores de salud se mueven de forma independiente también a muy corto plazo.
+
+cor(rend_1m[, c("XLU", "DUK", "NEE", "CEG", "VST")])
+vif(modeloI3_1m)
+cor(rend_5m[, c("XLU", "DUK", "NEE", "CEG", "VST")])
+vif(modeloI3_5m)
+
+##  MODELO 3
+##  --Se mantienen los dos bloques del modelo diario: utilities clásicas (DUK-NEE: 0.47 a 1 min, 0.63 a 5 min) y generadoras ligadas a IA (CEG-VST: 0.72 a 1 min, 0.84 a 5 min).
+##  --CEG-VST a 5 minutos (0.84) es la correlación más alta de todos los modelos, incluso mayor que en diario (0.75).
+##  --VIF: 1 minuto entre 1.28 y 2.17; 5 minutos DUK 1.67, NEE 1.80, CEG 3.69, VST 3.41. Son los VIF más altos de la actividad, pero siguen por debajo de 5: no es problemática y no se corrige.
+##  --Esta correlación explica que VST sea la variable menos precisa a 5 minutos (t = 3.52).
+
+##  CONCLUSIÓN: ningún modelo intradía presenta multicolinealidad problemática, igual que los modelos diarios.
+
+```
+
+
+```{r}
+
+##  EVALUANDO HETEROCEDASTICIDAD
+##  H0: homocedasticidad (varianza constante del error). Si se rechaza, los coeficientes siguen siendo insesgados pero los errores estándar, las pruebas t, F y los IC pierden validez.
+
+bptest(modeloI1_1m)
+gqtest(modeloI1_1m, order.by = ~ SMH, data = rend_1m)
+bptest(modeloI1_5m)
+gqtest(modeloI1_5m, order.by = ~ SMH, data = rend_5m)
+
+##  MODELO 1
+##  --Breusch-Pagan: 1 min BP = 40.59, p = 3.3e-08; 5 min BP = 11.71, p = 0.020. Se rechaza H0 en ambas frecuencias (chi-cuadrada crítica al 5% con 4 gl = 9.49).
+##  --Goldfeld-Quandt: 1 min GQ = 0.70, p = 0.9997; 5 min GQ = 0.48, p = 0.999. No se rechaza H0 contra la alternativa de que la varianza AUMENTA en el segundo segmento.
+##  --Un GQ menor a 1 indica lo contrario: la varianza del error es mayor en el primer segmento (minutos de rendimiento más bajo de SMH). La varianza del error es mayor cuando el ETF cae que cuando sube.
+
+bptest(modeloI2_1m)
+gqtest(modeloI2_1m, order.by = ~ XLV, data = rend_1m)
+bptest(modeloI2_5m)
+gqtest(modeloI2_5m, order.by = ~ XLV, data = rend_5m)
+
+##  MODELO 2
+##  --Breusch-Pagan: 1 min BP = 27.74, p = 1.4e-05; 5 min BP = 13.27, p = 0.010. Se rechaza H0 en ambas frecuencias: hay heterocedasticidad.
+##  --Goldfeld-Quandt: 1 min GQ = 0.94, p = 0.738; 5 min GQ = 0.66, p = 0.959. No se rechaza H0 con este orden.
+
+bptest(modeloI3_1m)
+gqtest(modeloI3_1m, order.by = ~ XLU, data = rend_1m)
+bptest(modeloI3_5m)
+gqtest(modeloI3_5m, order.by = ~ XLU, data = rend_5m)
+
+##  MODELO 3
+##  --Breusch-Pagan: 1 min BP = 13.17, p = 0.011; 5 min BP = 20.81, p = 0.0003. Se rechaza H0 en ambas frecuencias.
+##  --Goldfeld-Quandt: 1 min GQ = 0.86, p = 0.933; 5 min GQ = 0.88, p = 0.705. No se rechaza H0 con este orden.
+
+##  CONCLUSIÓN: Breusch-Pagan detecta heterocedasticidad en los 6 modelos intradía, mientras que Goldfeld-Quandt (ordenado por la variable dependiente) no la detecta en ninguno.
+##  BP evalúa si la varianza depende de cualquiera de las X; GQ solo detecta una varianza que crece en el orden elegido. En los 6 casos GQ < 1: la varianza es mayor en los minutos de caída, por lo que la prueba de una cola ("aumenta") no puede rechazar.
+##  En datos intradía la heterocedasticidad es esperable: la volatilidad es mayor en la apertura y al cierre que a mediodía, y los minutos de movimientos grandes en las acciones generan errores más grandes.
+
+```
+
+
+```{r}
+
+##  EVALUANDO AUTOCORRELACIÓN (DURBIN-WATSON)
+##  H0: no hay autocorrelación de primer orden en los residuales. DW cercano a 2 = sin autocorrelación; DW < 2 sugiere autocorrelación positiva y DW > 2 negativa.
+##  Por defecto dwtest() solo prueba autocorrelación POSITIVA (alternative = "greater"); como varios DW salieron mayores a 2, se agrega la prueba de dos colas para detectar autocorrelación negativa.
+
+dwtest(modeloI1_1m)
+dwtest(modeloI1_1m, alternative = "two.sided")
+dwtest(modeloI1_5m)
+dwtest(modeloI1_5m, alternative = "two.sided")
+
+##  MODELO 1
+##  --1 minuto: DW = 2.132. Contra autocorrelación positiva p = 0.968 (no se rechaza H0); en dos colas p = 0.064: no se rechaza al 5%, pero sí al 10%. Hay una autocorrelación negativa débil (rho ~ -0.07).
+##  --5 minutos: DW = 1.907, p = 0.272 (dos colas p = 0.545). No hay autocorrelación.
+
+dwtest(modeloI2_1m)
+dwtest(modeloI2_1m, alternative = "two.sided")
+dwtest(modeloI2_5m)
+dwtest(modeloI2_5m, alternative = "two.sided")
+
+##  MODELO 2
+##  --1 minuto: DW = 2.201. Contra autocorrelación positiva p = 0.998, pero en dos colas p = 0.0049: se RECHAZA H0. Hay autocorrelación negativa (rho ~ -0.10).
+##  --5 minutos: DW = 1.898, p = 0.264 (dos colas p = 0.527). No hay autocorrelación.
+
+dwtest(modeloI3_1m)
+dwtest(modeloI3_1m, alternative = "two.sided")
+dwtest(modeloI3_5m)
+dwtest(modeloI3_5m, alternative = "two.sided")
+
+##  MODELO 3
+##  --1 minuto: DW = 2.652. El p-value de 1 en la prueba por defecto NO significa ausencia de autocorrelación: solo descarta la positiva. En dos colas p = 7.8e-20: se RECHAZA H0. Hay autocorrelación negativa fuerte (rho ~ -0.33).
+##  --5 minutos: DW = 2.660, dos colas p = 4.0e-05. Se RECHAZA H0: la autocorrelación negativa (rho ~ -0.33) persiste incluso a 5 minutos.
+
+##  CONCLUSIÓN
+##  --Autocorrelación negativa significa que un error positivo tiende a ser seguido por uno negativo: cuando XLU se desvía de lo que explican sus acciones, en la siguiente vela corrige (reversión).
+##  --Causas: (1) el rebote entre precio de compra y de venta (bid-ask bounce), que es más fuerte en XLU porque su precio es bajo (~41 USD) y un centavo de cambio representa un movimiento relativamente grande; (2) el arbitraje del ETF, que corrige rápidamente cualquier diferencia entre el precio de XLU y el valor de sus acciones.
+##  --La autocorrelación es mayor en 1 minuto que en 5 minutos en los modelos 1 y 2, y desaparece a 5 minutos: al agregar el tiempo, el ruido de microestructura se compensa.
+##  --Con autocorrelación, los coeficientes de MCO siguen siendo insesgados, pero los errores estándar son incorrectos. En el modelo 3 los t son tan altos que las conclusiones no cambian, pero lo correcto sería usar errores estándar robustos (Newey-West).
+
+```
+
+
+##  COMPARACIÓN CONTRA LOS MODELOS DIARIOS ORIGINALES
+
+| Modelo | Frecuencia | Y | Obs. | R2 | Suma de betas | Mayor exposición | Alfa | Hetero (BP) | Autocorrelación (DW) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 Semis | Diario | FSELX | 940 | 0.860 | 0.856 | NVDA (0.311) | Negativo y significativo | Sí | No (DW = 2.01) |
+| 1 Semis | 1 min | SMH | 778 | 0.841 | 0.981 | NVDA (0.359) | No significativo | Sí | Negativa débil (10%) |
+| 1 Semis | 5 min | SMH | 154 | 0.874 | 0.980 | AVGO (0.301) | No significativo | Sí | No |
+| 2 Salud | Diario | FSPHX | 940 | 0.404 | 0.581 | ISRG (0.168) | No significativo | No | No (DW = 2.06) |
+| 2 Salud | 1 min | XLV | 778 | 0.658 | 0.626 | LLY (0.248) | No significativo | Sí | Negativa |
+| 2 Salud | 5 min | XLV | 154 | 0.821 | 0.756 | LLY (0.308) | No significativo | Sí | No |
+| 3 Utilities | Diario | FSUTX | 946 | 0.842 | 0.868 | DUK (0.445) | Marginal (p = 0.050) | Sí | No (DW = 1.99) |
+| 3 Utilities | 1 min | XLU | 778 | 0.722 | 0.854 | NEE (0.448) | No significativo | Sí | Negativa fuerte |
+| 3 Utilities | 5 min | XLU | 154 | 0.869 | 0.865 | DUK (0.465) | No significativo | Sí | Negativa fuerte |
+
+##  SIMILITUDES
+##  --Los signos de todos los coeficientes son positivos en las 9 estimaciones: el fondo o el ETF siempre se mueve en la misma dirección que sus acciones, en cualquier horizonte.
+##  --Todas las pendientes son significativas al 0.1% en todas las frecuencias, y todos los modelos son significativos en conjunto (prueba F).
+##  --Ningún modelo presenta multicolinealidad problemática (todos los VIF < 5), ni en diario ni en intradía. Se mantiene la estructura de correlaciones: semis con correlaciones moderadas, salud casi independiente y utilities en dos bloques (clásicas vs. IA).
+##  --La heterocedasticidad aparece tanto en diario como en intradía (salvo el modelo 2 diario según BP).
+##  --El modelo 3 a 5 minutos reproduce casi exactamente los coeficientes diarios de FSUTX (DUK ~0.45, NEE ~0.25, CEG ~0.09): la estructura del sector utilities es estable entre horizontes.
+
+##  DIFERENCIAS
+##  --R2: en semis y utilities la R2 de 5 minutos (~0.87) es igual o mayor que la diaria, y la de 1 minuto es menor. En los 3 modelos la R2 sube al pasar de 1 a 5 minutos (efecto Epps): a frecuencias muy altas las acciones no se ajustan en el mismo instante y aparecen minutos sin cambio de precio, lo que reduce la correlación medida.
+##  --Salud: la R2 intradía (0.66 a 0.82) es mucho mayor que la diaria (0.40). La diferencia viene de la variable dependiente: XLV está más concentrado en estas 4 acciones (sobre todo en LLY) que el fondo activo FSPHX, que está más diversificado.
+##  --Suma de betas: en semis sube de 0.86 (FSELX) a 0.98 (SMH): el ETF es casi tan sensible como la canasta de las 4 acciones, mientras que el fondo activo tiene otras posiciones y efectivo.
+##  --Alfa: el alfa negativo y significativo de FSELX en diario desaparece en intradía. El alfa diario refleja comisiones y decisiones del gestor a lo largo de años; en 2 días de datos por minuto no hay espacio para que aparezca.
+##  --Exposiciones: cambian según la frecuencia. En 1 minuto los coeficientes de las acciones menos líquidas en el dato (DUK, ISRG) se subestiman; a 5 minutos se acercan a los valores diarios.
+##  --Autocorrelación: no existe en ningún modelo diario (DW de 1.99 a 2.06), pero aparece en los intradía (negativa, sobre todo en 1 minuto y en XLU) por el ruido de microestructura del mercado. Es la diferencia más clara entre horizontes: a nivel diario los errores son independientes, a nivel de minutos no.
+##  --Precisión: con 154 observaciones, los modelos de 5 minutos tienen IC 2 a 2.5 veces más anchos que los de 1 minuto, y no permiten distinguir qué acción pesa más en semis.
+
+##  CONCLUSIÓN PARA LA ESTRATEGIA
+##  --La relación entre cada sector y sus acciones es robusta: se mantiene en diario, en 5 minutos y en 1 minuto, con los mismos signos y significancia.
+##  --Para decisiones de portafolio de mediano plazo (como las de HowTheMarketWorks), el modelo diario es el más adecuado: tiene más observaciones, captura el alfa del gestor y no tiene el ruido de microestructura.
+##  --Los modelos intradía confirman que, para replicar al sector a muy corto plazo, el ETF se explica casi por completo con estas acciones (R2 de 0.82 a 0.87 a 5 minutos), y que 5 minutos es una mejor frecuencia que 1 minuto para estimar estas relaciones.
