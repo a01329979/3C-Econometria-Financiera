@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+
+<!--
+#
+# index.htm
+#
+# Copyright (C) 2022 by Posit Software, PBC
+#
+# This program is licensed to you under the terms of version 3 of the
+# GNU Affero General Public License. This program is distributed WITHOUT
+# ANY EXPRESS OR IMPLIED WARRANTY, INCLUDING THOSE OF NON-INFRINGEMENT,
+# MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE. Please refer to the
+# AGPL (http://www.gnu.org/licenses/agpl-3.0.txt) for more details.
+#
+-->
+
+<!-- standards mode -->
+<html lang="en">
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+  <meta name="gwt:property" content="compiler.stackMode=native" />
+  
+  <meta name="rs-csrf-token" content="9028a81a-58ea-4617-b441-3fa98a527193" />
+  <link rel="server-homepage" href="..&#x2F;..&#x2F;home" />
+  <link rel="shortcut icon" href="images/Posit-Product_rst-server-favicon.svg" />
+  <title>RStudio Pro</title>
+  <script>
+(function(){
+  if (window.__rum_started) return;
+  window.__rum_started = true;
+
+  var t0Raw = sessionStorage.getItem('rum_launch_t0');
+  var sessionId = sessionStorage.getItem('rum_launch_session_id') || '';
+  var ide = 'rstudio';
+  sessionStorage.removeItem('rum_launch_t0');
+  sessionStorage.removeItem('rum_launch_session_id');
+  sessionStorage.removeItem('rum_launch_ide');
+
+  var t0 = t0Raw ? Number(t0Raw) : null;
+  var navId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random());
+  var lastPhase = null, timingsEmitted = false, isReady = false;
+
+  if (!sessionId) {
+    // URL scope is /[snp]/<5 user><8 project><8 session>/ — capture session only.
+    var m = location.pathname.match(/\/[snp]\/[A-Fa-f0-9]{13}([A-Fa-f0-9]{8})/);
+    sessionId = m ? m[1] : '';
+  }
+
+  function csrf(){
+    var meta = document.querySelector('meta[name="rs-csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  function send(p){
+    try {
+      var opts = {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RS-CSRF-Token': csrf()
+        },
+        body: JSON.stringify(p)
+      };
+      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+        opts.signal = AbortSignal.timeout(5000);
+      }
+      fetch('/workspaces/perf', opts).catch(function(){});
+    } catch (e) { /* fire-and-forget */ }
+  }
+
+  function navTimings(){
+    var t = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+    if (!t) return {};
+    return {
+      dns_ms: Math.round(t.domainLookupEnd - t.domainLookupStart),
+      tcp_ms: Math.round(t.connectEnd - t.connectStart),
+      ttfb_ms: Math.round(t.responseStart - t.requestStart),
+      download_ms: Math.round(t.responseEnd - t.responseStart),
+      dom_parse_ms: Math.round(t.domContentLoadedEventEnd - t.responseEnd),
+      load_complete_ms: Math.round(t.loadEventEnd - t.startTime),
+      fcp_ms: null
+    };
+  }
+
+  function emit(phase){
+    var now = Date.now();
+    var payload = {
+      session_id: sessionId,
+      ide: ide,
+      nav_id: navId,
+      phase: phase,
+      launch_t0_ms: t0,
+      click_to_phase_ms: t0 ? now - t0 : null,
+      nav_start_to_phase_ms: Math.round(performance.now())
+    };
+    if (phase === 'heartbeat' || phase === 'pagehide') {
+      payload.last_phase_reached = lastPhase;
+    }
+    if (phase === 'load' && !timingsEmitted) {
+      payload.timings = navTimings();
+      timingsEmitted = true;
+    }
+    if (phase !== 'heartbeat' && phase !== 'pagehide') lastPhase = phase;
+    send(payload);
+  }
+
+  try {
+    var obs = new PerformanceObserver(function(list){
+      var e = list.getEntriesByName('first-contentful-paint')[0];
+      if (e) { emit('fcp'); obs.disconnect(); }
+    });
+    obs.observe({type: 'paint', buffered: true});
+  } catch (e) { /* PerformanceObserver/paint unsupported */ }
+
+  if (document.readyState === 'complete') {
+    setTimeout(function(){ emit('load'); }, 0);
+  } else {
+    window.addEventListener('load', function(){ emit('load'); }, { once: true });
+  }
+
+  var fast = 0, backoffIdx = 0, backoff = [2000, 4000, 8000, 16000];
+  var timerId = null;
+  function next(){
+    if (isReady) return;
+    var d;
+    if (fast < 10) { fast++; d = 1000; }
+    else if (backoffIdx < backoff.length) { d = backoff[backoffIdx++]; }
+    else { d = 30000; }
+    timerId = setTimeout(function(){ if (!isReady) { emit('heartbeat'); next(); } }, d);
+  }
+  next();
+
+  window.__rum_record_app_init = function(){ emit('app_init'); };
+  window.__rum_record_ready = function(){
+    if (isReady) return;
+    isReady = true;
+    if (timerId !== null) { clearTimeout(timerId); timerId = null; }
+    emit('ready');
+  };
+
+  window.addEventListener('pagehide', function(){
+    if (!isReady) emit('pagehide');
+  });
+})();
+</script>
+  <link type="text/css" rel="stylesheet" href="css/icons.css" />
+  <script src="js/js-yaml.min.js"></script>
+  <script src="js/diff.min.js"></script>
+  <script src="rstudio/rstudio.nocache.js"></script>
+</head>
+
+<body></body>
+</html>
