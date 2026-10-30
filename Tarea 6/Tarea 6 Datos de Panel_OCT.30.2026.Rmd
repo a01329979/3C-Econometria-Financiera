@@ -1,0 +1,387 @@
+---
+title: "Tarea 6 Datos de Panel OCT302026"
+output:
+  html_document: default
+  pdf_document: default
+date: "2026-10-30"
+---
+
+
+##  OBJETIVO DE LA TAREA
+##  1) Estimar regresiones de datos de panel (como en clase) con 5 empresas y datos trimestrales de sus estados financieros.
+##  2) Resolver los ejercicios empíricos 16.10 y 16.11 del capítulo 16 de Gujarati.
+
+##  PREGUNTA QUE QUIERO CONTESTAR
+##  En la Tarea 4 vi que la demanda de energía de los data centers (IA) está empujando a las utilities a invertir fuertemente.
+##  Quiero saber si esa inversión (capex) se está financiando con deuda, o si las empresas la cubren con lo que generan (EBITDA, flujo de operación) y con su caja.
+##  Por eso mi variable dependiente es la DEUDA TOTAL.
+
+##  MODELO
+##  deuda = b0 + b1*ebitda + b2*capex + b3*cfo + b4*efectivo + u
+##  --deuda:    Deuda total (corto + largo plazo), saldo al cierre del trimestre.
+##  --ebitda:   EBITDA del trimestre.
+##  --capex:    Inversión en activo fijo (Capital Expenditures) del trimestre.
+##  --cfo:      Flujo de efectivo de la operación del trimestre.
+##  --efectivo: Efectivo y equivalentes al cierre del trimestre.
+##  Todas las variables están en miles de millones de dólares (USD bn).
+
+##  PANEL
+##  Unidades (i): 5 utilities de mi portafolio y del sector: DUK, NEE, SO, CEG y VST.
+##  Tiempo (t): trimestres del 1T 2020 al 2T 2026 (26 trimestres).
+##  Fuente: Refinitiv Workspace, Financial Summary (FINSUM), estados estandarizados, consolidados, trimestrales, en millones de USD.
+
+
+##  LIBRERIAS RELEVANTES
+```{r}
+library(plm)
+library(lmtest)
+library(ggplot2)
+library(AER)
+```
+
+
+##  PRIMERA PARTE: PANEL DE UTILITIES
+
+##  DATOS
+##  El archivo utilities_panel.csv lo armé a partir de los 5 Excel que exporté de Refinitiv (uno por empresa), quedándome con las variables del modelo.
+```{r}
+utilities <- read.csv("utilities_panel.csv")
+
+## Paso de millones a miles de millones de USD para que los coeficientes sean más fáciles de leer
+for (v in c("deuda", "ebitda", "capex", "cfo", "efectivo")) {
+  utilities[[v]] <- utilities[[v]] / 1000
+}
+
+head(utilities)
+table(utilities$empresa)
+```
+##  Tengo 124 observaciones: 26 trimestres para DUK, NEE, SO y VST, y 20 para CEG.
+
+```{r}
+summary(utilities[, c("deuda", "ebitda", "capex", "cfo", "efectivo")])
+aggregate(cbind(deuda, ebitda, capex, cfo, efectivo) ~ empresa, data = utilities, FUN = mean)
+```
+##  Hay dos grupos muy distintos: las utilities reguladas grandes (DUK, NEE y SO) tienen deuda promedio de 60 a 76 mil millones de dólares, mientras que los generadores independientes (CEG y VST) tienen entre 9 y 15 mil millones.
+##  Esa diferencia de tamaño entre empresas es justamente lo que los modelos de panel permiten controlar.
+##  Nota: el flujo de operación promedio de CEG sale negativo. En 2022-2023 sus flujos trimestrales fueron muy volátiles por los movimientos de garantías (colaterales) de su negocio de comercialización de energía.
+
+```{r}
+ggplot(utilities, aes(x = as.Date(fecha), y = deuda, color = empresa)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Deuda total por empresa (USD miles de millones)",
+       x = "Trimestre", y = "Deuda total", color = "Empresa") +
+  theme_minimal()
+```
+##  La deuda de las 5 empresas crece en todo el periodo, sobre todo desde 2023. NEE pasa de 47 a 110 mil millones y DUK de 64 a 91 mil millones.
+##  El salto de CEG en el 1T 2026 (de 9 a 22 mil millones) corresponde a la compra de Calpine, que se financió en parte con deuda.
+
+##  Le digo a plm cuál es la unidad (empresa) y cuál el tiempo (trimestre)
+```{r}
+panel <- pdata.frame(utilities, index = c("empresa", "trimestre"))
+```
+
+
+##  MODELO 1: REGRESIÓN LINEAL (MCO) SIN CONSIDERAR EL PANEL
+```{r}
+util_reglin <- lm(deuda ~ ebitda + capex + cfo + efectivo, data = utilities)
+summary(util_reglin)
+```
+##  Este modelo trata las 124 observaciones como si fueran independientes y no reconoce que vienen de las mismas 5 empresas.
+##  La R2 es alta (88%), pero está inflada: gran parte se explica simplemente porque las empresas grandes tienen más deuda, más EBITDA y más capex al mismo tiempo.
+##  EBITDA, capex y CFO salen significativos (p < 0.05); el efectivo no.
+##  El coeficiente de capex (17.4) diría que por cada mil millones adicionales de capex trimestral la deuda es 17 mil millones mayor, pero este número mezcla el efecto del tamaño de cada empresa. Por eso paso a los modelos de panel.
+
+
+##  MODELO 2: PANEL AGRUPADO (POOLED)
+```{r}
+util_po <- plm(deuda ~ ebitda + capex + cfo + efectivo,
+               data = panel,
+               model = "pooling")
+summary(util_po)
+```
+##  Da exactamente los mismos coeficientes que MCO. Es el mismo modelo, solo que ahora estimado con plm para poder compararlo con los de efectos fijos y aleatorios.
+##  Supone que todas las empresas comparten el mismo intercepto, es decir, que DUK y VST tendrían la misma deuda "base" si tuvieran el mismo EBITDA y capex, lo cual no es realista.
+
+
+##  MODELO 3: EFECTOS FIJOS (WITHIN)
+```{r}
+util_fe <- plm(deuda ~ ebitda + capex + cfo + efectivo,
+               data = panel,
+               model = "within")
+summary(util_fe)
+```
+##  Efectos fijos permite que cada empresa tenga su propio intercepto y solo usa la variación DENTRO de cada empresa a lo largo del tiempo.
+##  --EBITDA (4.55, p < 0.001): cuando el EBITDA trimestral de una empresa sube mil millones, su deuda es 4.6 mil millones mayor. Más EBITDA da más capacidad de endeudamiento, porque el apalancamiento se mide como deuda/EBITDA.
+##  --Capex (10.0, p < 0.001): es la variable más importante. Cuando una empresa aumenta su capex trimestral en mil millones, su deuda es 10 mil millones mayor. Esto confirma que la inversión se está financiando con deuda.
+##  --CFO (0.87) y efectivo (-0.23) dejan de ser significativos. Ya controlando por empresa, el flujo de operación y la caja no explican los cambios en la deuda.
+##  El coeficiente de capex baja de 17.4 (MCO) a 10.0: parte del efecto que veía en MCO era simplemente el tamaño de cada empresa.
+##  La R2 within (52%) es menor que la de MCO porque ya no incluye las diferencias entre empresas, solo los cambios en el tiempo dentro de cada una.
+
+##  Interceptos de cada empresa
+```{r}
+fixef(util_fe)
+```
+##  Son la deuda "base" de cada empresa, una vez descontado lo que explican sus variables.
+##  NEE (34.8), DUK (29.6) y SO (24.1) tienen interceptos mucho más altos que VST (4.5) y CEG (-1.9).
+##  Esto tiene sentido: las utilities reguladas pueden cargar mucha más deuda porque sus ingresos están asegurados por tarifas aprobadas por el regulador, mientras que los generadores independientes venden a precios de mercado y tienen que ser más conservadores.
+
+##  PRUEBA F: ¿POOLED O EFECTOS FIJOS?
+##  H0: todos los interceptos de las empresas son iguales (sirve el pooled).
+##  H1: hay efectos propios de cada empresa (sirven los efectos fijos).
+```{r}
+pFtest(util_fe, util_po)
+```
+##  F = 30.6 con p < 0.001, rechazo H0. Las diferencias entre empresas son significativas y el modelo pooled no es adecuado.
+
+
+##  MODELO 4: EFECTOS ALEATORIOS
+##  Nota: con el método que usa plm por default (Swamy-Arora) el modelo no se puede estimar, porque tengo 5 coeficientes (4 variables + intercepto) y solo 5 empresas.
+##  Por eso uso el método de Amemiya, que plm también ofrece y que no tiene esa restricción.
+```{r}
+util_re <- plm(deuda ~ ebitda + capex + cfo + efectivo,
+               data = panel,
+               model = "random",
+               random.method = "amemiya")
+summary(util_re)
+```
+##  Efectos aleatorios supone que las diferencias entre empresas son aleatorias y no están relacionadas con las variables explicativas.
+##  Los coeficientes son casi iguales a los de efectos fijos: EBITDA 4.60 y capex 10.37 (ambos p < 0.001), y CFO y efectivo siguen sin ser significativos.
+##  En "Effects", el 81% de la varianza del error viene de las diferencias entre empresas (individual) y solo el 19% del error idiosincrático. Esto confirma que el efecto de cada empresa pesa mucho.
+
+
+##  PRUEBA DE HAUSMAN: ¿EFECTOS FIJOS O ALEATORIOS?
+##  H0: efectos aleatorios es consistente (las diferencias entre empresas no están relacionadas con las variables) y es preferible.
+##  H1: efectos aleatorios es inconsistente y hay que usar efectos fijos.
+```{r}
+phtest(util_fe, util_re)
+```
+##  Chi2 = 4.34 con p = 0.36, no rechazo H0. Los coeficientes de los dos modelos no son significativamente distintos, así que me quedo con EFECTOS ALEATORIOS, que es más eficiente.
+##  Aun así, como los coeficientes son prácticamente iguales, la conclusión no cambia con cualquiera de los dos.
+
+
+##  PRUEBA DE WOOLDRIDGE: AUTOCORRELACIÓN SERIAL
+##  H0: no hay autocorrelación serial en los errores.
+```{r}
+pwartest(util_fe)
+```
+##  F = 12.4 con p < 0.001, rechazo H0: hay autocorrelación. Es lógico, porque la deuda es un saldo que se arrastra de un trimestre a otro.
+##  Con autocorrelación los coeficientes siguen siendo válidos, pero los errores estándar están mal calculados. Por eso los corrijo abajo con errores robustos.
+
+
+##  PRUEBA DE PESARAN: DEPENDENCIA TRANSVERSAL
+##  H0: no hay dependencia entre las empresas (los errores de una no se relacionan con los de otra).
+```{r}
+pcdtest(util_fe, test = "cd")
+```
+##  z = 1.43 con p = 0.15, no rechazo H0. No hay evidencia de que los errores de las 5 empresas estén correlacionados entre sí, así que no necesito corregir por dependencia transversal.
+
+
+##  MODELO FINAL: EFECTOS ALEATORIOS CON ERRORES ROBUSTOS
+##  Uso errores estándar robustos (Arellano), que corrigen la autocorrelación detectada por la prueba de Wooldridge.
+```{r}
+coeftest(util_re, vcov = vcovHC(util_re, method = "arellano", type = "HC1"))
+```
+##  Con los errores corregidos, EBITDA (p < 0.001) y capex (p < 0.001) siguen siendo significativos; CFO y efectivo siguen sin serlo.
+##  Los errores estándar suben un poco (el de capex pasa de 1.44 a 2.11), pero la conclusión es la misma.
+
+
+##  REVISIÓN ADICIONAL: EFECTOS FIJOS POR EMPRESA Y POR TRIMESTRE
+##  Quise revisar si la relación capex-deuda se mantiene al controlar también por el trimestre, es decir, por lo que les pasó a todas las empresas al mismo tiempo (tasas de interés, ciclo de inversión del sector).
+```{r}
+util_fe2 <- plm(deuda ~ ebitda + capex + cfo + efectivo,
+                data = panel,
+                model = "within",
+                effect = "twoways")
+summary(util_fe2)
+pFtest(util_fe2, util_fe)
+```
+##  Los efectos por trimestre son significativos (F = 3.06, p < 0.001), y al incluirlos ninguna variable sale significativa.
+##  Esto me dice que buena parte de la relación entre capex y deuda es un movimiento COMÚN del sector: desde 2023 todas las utilities están invirtiendo más y endeudándose más al mismo tiempo.
+##  Con solo 5 empresas no alcanzo a separar el efecto propio de cada una del ciclo del sector. Para eso necesitaría un panel con más empresas.
+
+
+##  CONCLUSIÓN DEL PANEL
+##  1) El modelo adecuado es el de EFECTOS ALEATORIOS (prueba F: el pooled no sirve; Hausman: no hay diferencia con efectos fijos), con errores robustos por la autocorrelación.
+##  2) El capex es el principal factor asociado a la deuda: por cada mil millones de dólares adicionales de inversión trimestral, la deuda es unos 10 mil millones mayor.
+##  3) El EBITDA también se asocia con más deuda: las empresas que generan más pueden endeudarse más manteniendo su apalancamiento.
+##  4) El flujo de operación y la caja no explican la deuda, lo que sugiere que el capex no se está cubriendo con recursos propios sino con financiamiento.
+##  5) Desde el punto de vista de crédito, esto es algo a vigilar: si el capex por la demanda de los data centers sigue creciendo más rápido que el EBITDA, el apalancamiento de estas empresas va a subir.
+##  6) Limitación: con 5 empresas, gran parte del efecto es un ciclo común del sector (ver la revisión con efectos por trimestre), por lo que los coeficientes deben leerse como asociación y no como causalidad.
+
+
+
+##  SEGUNDA PARTE: EJERCICIOS DE GUJARATI, CAPÍTULO 16
+
+##  EJERCICIO 16.10
+##  Consulte el ejemplo de las aerolíneas analizado en el texto. En lugar del modelo lineal presentado en la ecuación (16.4.2), estime un modelo de regresión log-lineal y compare los resultados que se proporcionan en la tabla 16.2.
+
+##  Los datos del libro (6 aerolíneas, 1970-1984) vienen en el paquete AER como USAirlines.
+##  Variables: cost = costo total (miles de USD), output = producción (millas-pasajero, índice), price = precio del combustible, load = factor de carga (ocupación promedio de la flota).
+```{r}
+data("USAirlines")
+head(USAirlines)
+```
+
+##  Primero reviso que sean los mismos datos del libro, replicando la regresión lineal de la tabla 16.2
+```{r}
+aero_lineal <- lm(cost ~ output + price + load, data = USAirlines)
+summary(aero_lineal)
+```
+##  Los coeficientes (1,158,559; 2,026,114; 1.2253 y -3,065,753) y la R2 (0.946) son los de la tabla 16.2, así que los datos coinciden con los del libro.
+
+##  Modelo log-lineal agrupado (pooled). El factor de carga ya es una proporción (entre 0 y 1), así que lo dejo en nivel.
+```{r}
+aero_log <- lm(log(cost) ~ log(output) + log(price) + load, data = USAirlines)
+summary(aero_log)
+```
+##  En el modelo log-lineal los coeficientes son ELASTICIDADES:
+##  --log(output) = 0.883: si la producción sube 1%, el costo sube 0.88%. Como es menor que 1, hay economías de escala.
+##  --log(price) = 0.454: si el precio del combustible sube 1%, el costo sube 0.45%.
+##  --load = -1.63: si el factor de carga sube 0.01 (un punto), el costo baja aproximadamente 1.6%. Volar con aviones más llenos reduce el costo.
+##  Todos son significativos y la R2 sube de 0.946 (lineal) a 0.988 (log-lineal).
+##  Comparado con la tabla 16.2, los signos son los mismos, pero el modelo lineal da coeficientes en dólares que dependen de la escala de las variables (por ejemplo, 2 millones de dólares por unidad de producción), mientras que el log-lineal da elasticidades que se interpretan directamente en porcentaje.
+##  La R2 de los dos modelos no se puede comparar directamente porque la variable dependiente es distinta (cost vs log(cost)), pero el log-lineal es más fácil de interpretar y más común para funciones de costo.
+
+##  Además, estimo el log-lineal con efectos fijos y aleatorios, como en las otras tablas del capítulo
+```{r}
+aero_panel <- pdata.frame(USAirlines, index = c("firm", "year"))
+aero_po <- plm(log(cost) ~ log(output) + log(price) + load, data = aero_panel, model = "pooling")
+aero_fe <- plm(log(cost) ~ log(output) + log(price) + load, data = aero_panel, model = "within")
+aero_re <- plm(log(cost) ~ log(output) + log(price) + load, data = aero_panel, model = "random")
+summary(aero_fe)
+pFtest(aero_fe, aero_po)
+summary(aero_re)
+phtest(aero_fe, aero_re)
+```
+##  Con efectos fijos, las elasticidades son 0.92 (producción) y 0.42 (combustible), y el factor de carga -1.07. Son parecidas al pooled, pero el efecto del factor de carga es menor.
+##  La prueba F (F = 57.7, p < 0.001) dice que sí hay diferencias entre aerolíneas, así que el pooled no es adecuado.
+##  La prueba de Hausman (p = 0.55) no rechaza H0, por lo que efectos aleatorios también es válido y da resultados casi iguales (0.91, 0.42 y -1.06).
+##  Es la misma conclusión que el libro obtiene con el modelo lineal: hay efectos propios de cada aerolínea y efectos aleatorios es adecuado.
+
+
+##  EJERCICIO 16.11
+##  Datos de la tabla 1.1: producción de huevo (millones) y precio por docena (centavos) en los 50 estados de EUA, 1990 y 1991.
+##  Y1, X1 = 1990; Y2, X2 = 1991.
+```{r}
+huevos <- read.csv(text = "estado,Y1,Y2,X1,X2
+AL,2206,2186,92.7,91.4
+MT,172,164,68.0,66.0
+AK,0.7,0.7,151.0,149.0
+NE,1202,1400,50.3,48.9
+AZ,73,74,61.0,56.0
+NV,2.2,1.8,53.9,52.7
+AR,3620,3737,86.3,91.8
+NH,43,49,109.0,104.0
+CA,7472,7444,63.4,58.4
+NJ,442,491,85.0,83.0
+CO,788,873,77.8,73.0
+NM,283,302,74.0,70.0
+CT,1029,948,106.0,104.0
+NY,975,987,68.1,64.0
+DE,168,164,117.0,113.0
+NC,3033,3045,82.8,78.7
+FL,2586,2537,62.0,57.2
+ND,51,45,55.2,48.0
+GA,4302,4301,80.6,80.8
+OH,4667,4637,59.1,54.7
+HI,227.5,224.5,85.0,85.5
+OK,869,830,101.0,100.0
+ID,187,203,79.1,72.9
+OR,652,686,77.0,74.6
+IL,793,809,65.0,70.5
+PA,4976,5130,61.0,52.0
+IN,5445,5290,62.7,60.1
+RI,53,50,102.0,99.0
+IA,2151,2247,56.5,53.0
+SC,1422,1420,70.1,65.9
+KS,404,389,54.5,47.8
+SD,435,602,48.0,45.8
+KY,412,483,67.7,73.5
+TN,277,279,71.0,80.7
+LA,273,254,115.0,115.0
+TX,3317,3356,76.7,72.6
+ME,1069,1070,101.0,97.0
+UT,456,486,64.0,59.0
+MD,885,898,76.6,75.4
+VT,31,30,106.0,102.0
+MA,235,237,105.0,102.0
+VA,943,988,86.3,81.2
+MI,1406,1396,58.0,53.8
+WA,1287,1313,74.1,71.5
+MN,2499,2697,57.7,54.0
+WV,136,174,104.0,109.0
+MS,1434,1468,87.8,86.7
+WI,910,873,60.1,54.0
+MO,1580,1622,55.4,51.5
+WY,1.7,1.7,83.0,83.0")
+head(huevos)
+```
+
+##  a) Modelo para 1990 y 1991 por separado
+```{r}
+huevos_1990 <- lm(Y1 ~ X1, data = huevos)
+summary(huevos_1990)
+huevos_1991 <- lm(Y2 ~ X2, data = huevos)
+summary(huevos_1991)
+```
+##  1990: Y = 3,119.8 - 22.51 X. Por cada centavo más en el precio de la docena, la producción es 22.5 millones de huevos menor (p = 0.04).
+##  1991: Y = 3,149.4 - 23.35 X (p = 0.03).
+##  Los dos años dan resultados casi iguales: relación negativa y significativa al 5%, pero con R2 muy baja (8% y 10%). El precio explica muy poco de las diferencias en producción entre estados.
+
+##  b) Regresión agrupada (pooled) de los dos años
+##  Paso los datos a formato largo: cada renglón es un estado en un año (100 observaciones)
+```{r}
+huevos_largo <- rbind(
+  data.frame(estado = huevos$estado, anio = 1990, Y = huevos$Y1, X = huevos$X1),
+  data.frame(estado = huevos$estado, anio = 1991, Y = huevos$Y2, X = huevos$X2))
+
+huevos_po <- lm(Y ~ X, data = huevos_largo)
+summary(huevos_po)
+```
+##  Y = 3,132.8 - 22.90 X, con p = 0.002. Al tener 100 observaciones en lugar de 50 la pendiente es más precisa, pero la R2 sigue siendo baja (9%).
+##  Al agrupar estoy suponiendo que:
+##  --El intercepto y la pendiente son los mismos para los 50 estados y para los dos años.
+##  --Las observaciones de un mismo estado en 1990 y 1991 son independientes entre sí, lo cual difícilmente se cumple (un estado que produce mucho en 1990 también produce mucho en 1991).
+##  --No hay características propias de cada estado (tamaño de la industria, clima, costos) que afecten la producción.
+##  Como en a) los dos años dieron casi lo mismo, agrupar parece razonable en cuanto al tiempo, pero no en cuanto a los estados.
+
+##  c) Efectos fijos con distinción entre los dos años (variable dicótoma de 1991)
+```{r}
+huevos_fe_anio <- lm(Y ~ X + factor(anio), data = huevos_largo)
+summary(huevos_fe_anio)
+```
+##  Y = 3,154.0 - 22.95 X - 35.2 D1991.
+##  La pendiente casi no cambia (-22.95, p = 0.003) y la dicótoma de 1991 no es significativa (p = 0.91): la producción no fue distinta entre los dos años una vez que controlo por el precio.
+##  Distinguir entre años no aporta nada, lo que coincide con el resultado del inciso a).
+
+##  d) ¿Se puede usar efectos fijos con distinción de los 50 estados?
+```{r}
+huevos_panel <- pdata.frame(huevos_largo, index = c("estado", "anio"))
+huevos_fe_estado <- plm(Y ~ X, data = huevos_panel, model = "within")
+summary(huevos_fe_estado)
+pFtest(huevos_fe_estado, plm(Y ~ X, data = huevos_panel, model = "pooling"))
+```
+##  Sí se puede, porque cada estado tiene 2 observaciones (1990 y 1991). Se agregan 49 dicótomas (una por estado menos la base) y quedan 100 - 50 - 1 = 49 grados de libertad, que sigue siendo positivo.
+##  El problema es que se gastan muchos grados de libertad y la estimación depende solo del cambio entre 1990 y 1991 dentro de cada estado, que es muy pequeño.
+##  Resultado: la pendiente baja a -2.05 y deja de ser significativa (p = 0.35). La prueba F (F = 2,291.7, p < 0.001) dice que las diferencias entre estados son enormes.
+##  Esto me dice que la relación negativa de los incisos anteriores venía de comparar estados distintos (los estados que producen mucho tienen precios bajos), no de que un mismo estado produzca menos cuando sube su precio.
+
+##  e) ¿Tiene sentido distinguir el efecto por estado y el efecto por año?
+```{r}
+huevos_fe_doble <- plm(Y ~ X, data = huevos_panel, model = "within", effect = "twoways")
+summary(huevos_fe_doble)
+```
+##  Tiene sentido para el estado, porque sus diferencias son muy grandes y significativas. Para el año, no tanto, porque en c) la dicótoma de 1991 no fue significativa.
+##  Si se incluyen los dos efectos con intercepto se necesitan 49 dicótomas de estado + 1 dicótoma de año = 50 dicótomas. Así se evita la trampa de la variable dicótoma.
+##  Quedan 100 - 52 = 48 grados de libertad (intercepto + pendiente + 50 dicótomas), y la pendiente sigue sin ser significativa (0.91, p = 0.72).
+
+##  f) ¿Sería apropiado el modelo de componentes del error (efectos aleatorios)?
+```{r}
+huevos_re <- plm(Y ~ X, data = huevos_panel, model = "random")
+summary(huevos_re)
+phtest(huevos_fe_estado, huevos_re)
+```
+##  En teoría no es el más apropiado: el modelo de componentes del error supone que los estados son una muestra aleatoria de una población más grande, pero aquí tengo a los 50 estados (toda la población), así que los efectos de cada estado son fijos y no aleatorios.
+##  Además, es probable que el efecto de cada estado esté relacionado con el precio (los grandes productores tienen precios más bajos), lo que viola el supuesto principal de efectos aleatorios.
+##  La prueba de Hausman lo confirma: Chi2 = 11.6 con p < 0.001, rechazo H0, por lo que efectos aleatorios es inconsistente y el modelo correcto es el de efectos fijos.
+##  La estimación con efectos aleatorios sí se puede hacer en R (como pide el libro con EViews): la pendiente es -2.92 y no es significativa (p = 0.18), y casi toda la varianza (99.9%) viene de las diferencias entre estados.
