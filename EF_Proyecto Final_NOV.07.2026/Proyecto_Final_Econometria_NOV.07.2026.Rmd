@@ -7,6 +7,12 @@ date: "2026-11-07"
 ---
 
 
+##  LINKS DE LA ENTREGA
+##  --Repositorio de GitHub: https://github.com/a01329979/3C-Econometria-Financiera/tree/main/EF_Proyecto%20Final_NOV.07.2026
+##  --Notebook de Google Colab (mismo código en R): https://colab.research.google.com/drive/1RM_9aotCsc27c_zyd2r8jJXunLII1pfJ?usp=sharing
+##  --Prompt de GitHub Copilot: https://github.com/copilot/share/c270512a-0080-8655-9853-140784c8005c
+
+
 ##  OBJETIVO DEL PROYECTO
 ##  Aplicar a las acciones de mi portafolio de How the Market Works (HTMW) los modelos vistos en el curso, y usar sus pronósticos para definir dos estrategias de compra: una para HTMW y otra para Interactive Brokers (IB).
 ##  Modelos:
